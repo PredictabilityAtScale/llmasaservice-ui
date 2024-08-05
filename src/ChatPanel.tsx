@@ -63,7 +63,7 @@ const ChatPanel: React.FC<ChatPanelProps> = ({
         if (lastController) stop(lastController);
         const controller = new AbortController();
 
-        send(initialPrompt, [], true, controller);
+        send(initialPrompt, messages, true, controller);
         setLastPrompt(initialPrompt);
         setLastController(controller);
         setHistory({});
