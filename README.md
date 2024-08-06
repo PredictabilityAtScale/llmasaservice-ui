@@ -17,6 +17,19 @@ What is LLM as a Service: https://llmasaservice.io
 
 Register for a LLM as a Service account and get your unique project id from the integration page https://app.llmasaservice.io/integration
 
+Dark mode example:
+
+![Dark Mode](images/darkmode.png)
+
+Light mode example:
+
+![Light Mode](images/lightmode.png)
+
+System instructios example:
+
+![Brand and personality](images/personalityandbrand.png)
+
+see documentation more examples: https://predictabilityatscale.github.io/llmasaservice-ui/?path=/docs/chatpanel--docs
 
 ## Installation
 
