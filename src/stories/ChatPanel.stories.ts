@@ -23,6 +23,8 @@ export const ChatPanelStory: Story = {
     placeholder: "Type a message",
     theme: "light",
     messages: [],
+    width:"300px",
+    height:"100vh",
   },
 };
 
@@ -36,6 +38,8 @@ export const ChatPanelThumbsStory: Story = {
     theme: "dark",
     thumbsUpClick: () => alert("Thumbs up clicked"),
     thumbsDownClick: () => alert("Thumbs down clicked"),
+    width:"300px",
+    height:"100vh",
   },
 };
 
@@ -55,5 +59,22 @@ export const ChatPanelSystemInstructionStory: Story = {
         content: "Give all responses like a pirate",
       },
     ],
+    width:"300px",
+    height:"100vh",
+  },
+};
+
+export const ChatPanelHorizontalThumbsStory: Story = {
+  args: {
+    title: "Chat",
+    project_id: "[get this from your  control panel]",
+    initialPrompt: "Hi",
+    hideInitialPrompt: true,
+    placeholder: "Type a message",
+    theme: "dark",
+    thumbsUpClick: () => alert("Thumbs up clicked"),
+    thumbsDownClick: () => alert("Thumbs down clicked"),
+    width:"800px",
+    height:"400px",
   },
 };
