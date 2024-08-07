@@ -52,7 +52,7 @@ In a React application
 ```typescript
 import React from 'react';
 import { ChatPanel } from 'llmasaservice-ui';
-import "../../node_modules/llmasaservice-ui/dist/index.css"; // default styles for light and dark, or replace with your own
+import "../node_modules/llmasaservice-ui/dist/index.css"; // default styles for light and dark, or replace with your own
 
 const App = () => {
   return (
