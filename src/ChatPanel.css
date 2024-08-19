@@ -143,6 +143,27 @@
   margin-top: 10px;
 }
 
+.side-panel .scroll-button {
+  position: absolute;
+  left: 50%;
+  transform: translateX(-50%);
+  bottom: 5%;
+  background-color: #007bff;
+  color: white;
+  border: none;
+  border-radius: 50%;
+  width: 40px;
+  height: 40px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  z-index: 10;
+}
+
+.side-panel .scroll-button:hover {
+  background-color: #0056b3;
+}
 
 .side-panel-dark {
   font-family: "Roboto", Arial, Helvetica, sans-serif;
@@ -205,6 +226,7 @@
   border-radius: 10px;
 }
 .side-panel-dark .responseArea {
+  position: relative;
   flex: 1;
   background-color: #424242;
   border-radius: 10px;
@@ -276,4 +298,26 @@
 .side-panel-dark .button-container {
   display: flex;
   margin-top: 10px;
+}
+
+.side-panel-dark .scroll-button {
+  position: absolute;
+  left: 50%;
+  transform: translateX(-50%);
+  bottom: 5%;
+  background-color: #007bff;
+  color: white;
+  border: none;
+  border-radius: 50%;
+  width: 40px;
+  height: 40px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  z-index: 10;
+}
+
+.side-panel-dark .scroll-button:hover {
+  background-color: #0056b3;
 }

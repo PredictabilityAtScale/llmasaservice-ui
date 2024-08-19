@@ -17,6 +17,8 @@ export interface ChatPanelProps {
   markdownClass?: string;
   width?: string;
   height?: string;
+  url?: string | null;
+  scrollToEnd?: boolean;
 }
 
 const ChatPanel: React.FC<ChatPanelProps> = ({
@@ -33,10 +35,13 @@ const ChatPanel: React.FC<ChatPanelProps> = ({
   markdownClass = null,
   width = "300px",
   height = "100vh",
+  url = null,
+  scrollToEnd = false,
 }) => {
   const { send, response, idle, stop } = useLLM({
     project_id: project_id,
     customer: customer,
+    url: url,
   });
 
   const [nextPrompt, setNextPrompt] = useState("");
@@ -44,7 +49,11 @@ const ChatPanel: React.FC<ChatPanelProps> = ({
   const [history, setHistory] = useState<{ [prompt: string]: string }>({});
   const [isLoading, setIsLoading] = useState(false);
   const [lastPrompt, setLastPrompt] = useState<string | null>(null);
+  const [hasScroll, setHasScroll] = useState(false);
   const bottomRef = useRef<HTMLDivElement | null>(null);
+  const [isAtBottom, setIsAtBottom] = useState(true);
+
+  const responseAreaRef = useRef(null);
 
   // response change. Update the history
   useEffect(() => {
@@ -59,6 +68,10 @@ const ChatPanel: React.FC<ChatPanelProps> = ({
       });
     }
   }, [response]);
+
+  function hasVerticalScrollbar(element: any) {
+    return element.scrollHeight > element.clientHeight;
+  }
 
   // initial prompt change. Reset the chat history and get this response
   useEffect(() => {
@@ -77,9 +90,33 @@ const ChatPanel: React.FC<ChatPanelProps> = ({
     }
   }, [initialPrompt]);
 
+  /*
   useEffect(() => {
-    bottomRef.current?.scrollIntoView({ behavior: "smooth" });
+    if (scrollToEnd) bottomRef.current?.scrollIntoView({ behavior: "smooth" });
+    if (responseAreaRef.current) {
+      setHasScroll(hasVerticalScrollbar(responseAreaRef.current));
+    }
   }, [history]);
+*/
+  useEffect(() => {
+    if (scrollToEnd) {
+      bottomRef.current?.scrollIntoView({ behavior: "smooth" });
+    } else {
+      const responseArea = responseAreaRef.current as any;
+      if (responseArea) {
+        setHasScroll(hasVerticalScrollbar(responseArea));
+        const handleScroll = () => {
+          const isScrolledToBottom =
+            responseArea.scrollHeight - responseArea.scrollTop ===
+            responseArea.clientHeight;
+          setIsAtBottom(isScrolledToBottom);
+        };
+        handleScroll();
+        responseArea.addEventListener("scroll", handleScroll);
+        return () => responseArea.removeEventListener("scroll", handleScroll);
+      }
+    }
+  }, [response, history]);
 
   const continueChat = () => {
     if (!idle) {
@@ -118,6 +155,10 @@ const ChatPanel: React.FC<ChatPanelProps> = ({
     navigator.clipboard.writeText(text);
   }
 
+  const scrollToBottom = () => {
+    bottomRef.current?.scrollIntoView({ behavior: "smooth" });
+  };
+
   return (
     <>
       <div
@@ -125,7 +166,7 @@ const ChatPanel: React.FC<ChatPanelProps> = ({
         className={"side-panel" + (theme === "light" ? "" : "-dark")}
       >
         <div className="title">{title}</div>
-        <div className="responseArea">
+        <div className="responseArea" ref={responseAreaRef}>
           {isLoading ? <div className="loading-text">loading...</div> : null}
           {Object.entries(history).map(([prompt, response], index) => (
             <div className="history-entry" key={index}>
@@ -190,8 +231,12 @@ const ChatPanel: React.FC<ChatPanelProps> = ({
               </div>
             </div>
           ))}
-
           <div ref={bottomRef} />
+          {hasScroll && !isAtBottom && (
+            <button className="scroll-button" onClick={scrollToBottom}>
+              ↓
+            </button>
+          )}
         </div>
 
         <div className="input-container">
