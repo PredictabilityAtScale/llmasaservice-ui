@@ -25,6 +25,7 @@ export const ChatPanelStory: Story = {
     messages: [],
     width:"300px",
     height:"100vh",
+    initialMessage: "This is a initial message."
   },
 };
 

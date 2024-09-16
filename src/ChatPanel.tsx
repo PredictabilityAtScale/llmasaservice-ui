@@ -5,7 +5,8 @@ import "./ChatPanel.css";
 
 export interface ChatPanelProps {
   project_id: string;
-  initialPrompt: string;
+  initialPrompt?: string;
+  initialMessage?: string;
   title?: string;
   placeholder?: string;
   hideInitialPrompt?: boolean;
@@ -23,7 +24,7 @@ export interface ChatPanelProps {
 
 const ChatPanel: React.FC<ChatPanelProps> = ({
   project_id,
-  initialPrompt,
+  initialPrompt = "",
   title = "Chat",
   placeholder = "Type a message",
   hideInitialPrompt = true,
@@ -37,6 +38,7 @@ const ChatPanel: React.FC<ChatPanelProps> = ({
   height = "100vh",
   url = null,
   scrollToEnd = false,
+  initialMessage = "",
 }) => {
   const { send, response, idle, stop } = useLLM({
     project_id: project_id,
@@ -90,14 +92,6 @@ const ChatPanel: React.FC<ChatPanelProps> = ({
     }
   }, [initialPrompt]);
 
-  /*
-  useEffect(() => {
-    if (scrollToEnd) bottomRef.current?.scrollIntoView({ behavior: "smooth" });
-    if (responseAreaRef.current) {
-      setHasScroll(hasVerticalScrollbar(responseAreaRef.current));
-    }
-  }, [history]);
-*/
   useEffect(() => {
     if (scrollToEnd) {
       bottomRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -168,6 +162,15 @@ const ChatPanel: React.FC<ChatPanelProps> = ({
         <div className="title">{title}</div>
         <div className="responseArea" ref={responseAreaRef}>
           {isLoading ? <div className="loading-text">loading...</div> : null}
+          {initialMessage && initialMessage !== "" ? (
+            <div className="history-entry">
+              <div className="response">
+                <ReactMarkdown className={markdownClass}>
+                  {initialMessage}
+                </ReactMarkdown>
+              </div>
+            </div>
+          ) : null}
           {Object.entries(history).map(([prompt, response], index) => (
             <div className="history-entry" key={index}>
               {hideInitialPrompt && index === 0 ? null : (
