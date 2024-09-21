@@ -136,6 +136,14 @@ const ChatPanel: React.FC<ChatPanelProps> = ({
         messagesAndHistory.push({ role: "assistant", content: response });
       });
 
+      // set the history prompt with the about to be sent prompt
+      setHistory((prevHistory) => {
+        return {
+          ...prevHistory,
+          [nextPrompt ?? ""]: "",
+        };
+      });
+
       const controller = new AbortController();
       send(nextPrompt, messagesAndHistory, true, true, null, controller);
 
