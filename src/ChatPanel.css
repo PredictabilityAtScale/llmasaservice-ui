@@ -321,3 +321,29 @@
 .side-panel-dark .scroll-button:hover {
   background-color: #0056b3;
 }
+
+.chat-status {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 10px;
+  border-radius: 20px;
+  background-color: #f0f0f0;
+}
+
+.loading-dots {
+  font-size: 20px;
+  animation: blink 1s linear infinite;
+}
+
+@keyframes blink {
+  0% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0;
+  }
+  100% {
+    opacity: 1;
+  }
+}

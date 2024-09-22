@@ -2,6 +2,7 @@ import { LLMAsAServiceCustomer, useLLM } from "llmasaservice-client";
 import React, { useEffect, useRef, useState } from "react";
 import ReactMarkdown from "react-markdown";
 import "./ChatPanel.css";
+import ChatStatus from "./ChatStatus";
 
 export interface ChatPanelProps {
   project_id: string;
@@ -169,7 +170,6 @@ const ChatPanel: React.FC<ChatPanelProps> = ({
       >
         <div className="title">{title}</div>
         <div className="responseArea" ref={responseAreaRef}>
-          {isLoading ? <div className="loading-text">loading...</div> : null}
           {initialMessage && initialMessage !== "" ? (
             <div className="history-entry">
               <div className="response">
@@ -184,7 +184,11 @@ const ChatPanel: React.FC<ChatPanelProps> = ({
               {hideInitialPrompt && index === 0 ? null : (
                 <div className="prompt">{prompt}</div>
               )}
+
               <div className="response">
+                {index === Object.keys(history).length - 1 && isLoading ? (
+                  <div className="loading-text">loading...</div>
+                ) : null}
                 <ReactMarkdown className={markdownClass}>
                   {response}
                 </ReactMarkdown>
