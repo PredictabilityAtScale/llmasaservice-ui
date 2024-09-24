@@ -2,7 +2,7 @@ import { LLMAsAServiceCustomer, useLLM } from "llmasaservice-client";
 import React, { useEffect, useRef, useState } from "react";
 import ReactMarkdown from "react-markdown";
 import "./ChatPanel.css";
-import ChatStatus from "./ChatStatus";
+import remarkGfm from "remark-gfm";
 
 export interface ChatPanelProps {
   project_id: string;
@@ -23,7 +23,11 @@ export interface ChatPanelProps {
   scrollToEnd?: boolean;
 }
 
-const ChatPanel: React.FC<ChatPanelProps> = ({
+interface ExtraProps extends React.HTMLAttributes<HTMLElement> {
+  inline?: boolean;
+}
+
+const ChatPanel: React.FC<ChatPanelProps  & ExtraProps> = ({
   project_id,
   initialPrompt = "",
   title = "Chat",
@@ -173,7 +177,7 @@ const ChatPanel: React.FC<ChatPanelProps> = ({
           {initialMessage && initialMessage !== "" ? (
             <div className="history-entry">
               <div className="response">
-                <ReactMarkdown className={markdownClass}>
+                <ReactMarkdown className={markdownClass} remarkPlugins={[remarkGfm]}>
                   {initialMessage}
                 </ReactMarkdown>
               </div>
@@ -189,7 +193,7 @@ const ChatPanel: React.FC<ChatPanelProps> = ({
                 {index === Object.keys(history).length - 1 && isLoading ? (
                   <div className="loading-text">loading...</div>
                 ) : null}
-                <ReactMarkdown className={markdownClass}>
+                <ReactMarkdown className={markdownClass} remarkPlugins={[remarkGfm]} >
                   {response}
                 </ReactMarkdown>
                 <div className="button-container">

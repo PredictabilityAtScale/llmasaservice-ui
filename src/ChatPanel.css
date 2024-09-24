@@ -165,6 +165,22 @@
   background-color: #0056b3;
 }
 
+.side-panel table {
+  border-collapse: collapse;
+  margin-bottom: 1em; 
+  border: 1px solid #777;
+}
+
+.side-panel th {
+  border: 1px solid #777;
+  padding: 8px;
+}
+
+.side-panel td {
+  border: 1px solid #777;
+  padding: 8px;
+}
+
 .side-panel-dark {
   font-family: "Roboto", Arial, Helvetica, sans-serif;
   font-size: small;
@@ -322,28 +338,18 @@
   background-color: #0056b3;
 }
 
-.chat-status {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  padding: 10px;
-  border-radius: 20px;
-  background-color: #f0f0f0;
+.side-panel-dark table {
+  border-collapse: collapse;
+  margin-bottom: 1em; 
+  border: 1px solid #ddd;
 }
 
-.loading-dots {
-  font-size: 20px;
-  animation: blink 1s linear infinite;
+.side-panel-dark th {
+  border: 1px solid #ddd;
+  padding: 8px;
 }
 
-@keyframes blink {
-  0% {
-    opacity: 1;
-  }
-  50% {
-    opacity: 0;
-  }
-  100% {
-    opacity: 1;
-  }
+.side-panel-dark td {
+  border: 1px solid #ddd;
+  padding: 8px;
 }
