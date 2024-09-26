@@ -84,6 +84,7 @@
   margin-bottom: 10px;
   max-width: 96%;
   box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+  white-space: pre-wrap;
 }
 
 .side-panel .response {
@@ -258,6 +259,7 @@
   margin-bottom: 10px;
   max-width: 96%;
   box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+  white-space: pre-wrap;
 }
 .side-panel-dark .response {
   align-self: flex-end;

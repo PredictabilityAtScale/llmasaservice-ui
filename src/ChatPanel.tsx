@@ -3,6 +3,10 @@ import React, { useEffect, useRef, useState } from "react";
 import ReactMarkdown from "react-markdown";
 import "./ChatPanel.css";
 import remarkGfm from "remark-gfm";
+import { Prism as SyntaxHighlighter } from "react-syntax-highlighter";
+import  PrismStyle  from "react-syntax-highlighter";
+import materialDark from 'react-syntax-highlighter/dist/cjs/styles/prism/material-dark.js';
+import materialLight from "react-syntax-highlighter/dist/cjs/styles/prism/material-light.js";
 
 export interface ChatPanelProps {
   project_id: string;
@@ -21,13 +25,14 @@ export interface ChatPanelProps {
   height?: string;
   url?: string | null;
   scrollToEnd?: boolean;
+  prismStyle?: PrismStyle;
 }
 
 interface ExtraProps extends React.HTMLAttributes<HTMLElement> {
   inline?: boolean;
 }
 
-const ChatPanel: React.FC<ChatPanelProps  & ExtraProps> = ({
+const ChatPanel: React.FC<ChatPanelProps & ExtraProps> = ({
   project_id,
   initialPrompt = "",
   title = "Chat",
@@ -44,6 +49,7 @@ const ChatPanel: React.FC<ChatPanelProps  & ExtraProps> = ({
   url = null,
   scrollToEnd = false,
   initialMessage = "",
+  prismStyle = theme === "light" ? materialLight: materialDark,
 }) => {
   const { send, response, idle, stop } = useLLM({
     project_id: project_id,
@@ -166,6 +172,62 @@ const ChatPanel: React.FC<ChatPanelProps  & ExtraProps> = ({
     bottomRef.current?.scrollIntoView({ behavior: "smooth" });
   };
 
+  const CodeBlock = ({ node, className, children, style, ...props }: any) => {
+    const match = /language-(\w+)/.exec(className || "");
+
+    return match ? (
+      <>
+        <div
+          style={{
+            border: 0,
+            padding: 0,
+            height: "16px",
+            display: "flex",
+            justifyContent: "space-between",
+            alignItems: "center",
+          }}
+        >
+          <span>{match ? match[1] : "Unknown"}</span>
+          <button
+            onClick={() => copyToClipboard(children)}
+            className="copy-button"
+          >
+            <svg
+              xmlns="http://www.w3.org/2000/svg"
+              viewBox="0 0 320 320"
+              fill="currentColor"
+              className="icon-svg"
+            >
+              <path
+                d="M35,270h45v45c0,8.284,6.716,15,15,15h200c8.284,0,15-6.716,15-15V75c0-8.284-6.716-15-15-15h-45V15
+		c0-8.284-6.716-15-15-15H35c-8.284,0-15,6.716-15,15v240C20,263.284,26.716,270,35,270z M280,300H110V90h170V300z M50,30h170v30H95
+		c-8.284,0-15,6.716-15,15v165H50V30z"
+              />
+              <path d="M155,120c-8.284,0-15,6.716-15,15s6.716,15,15,15h80c8.284,0,15-6.716,15-15s-6.716-15-15-15H155z" />
+              <path d="M235,180h-80c-8.284,0-15,6.716-15,15s6.716,15,15,15h80c8.284,0,15-6.716,15-15S243.284,180,235,180z" />
+              <path
+                d="M235,240h-80c-8.284,0-15,6.716-15,15c0,8.284,6.716,15,15,15h80c8.284,0,15-6.716,15-15C250,246.716,243.284,240,235,240z
+		"
+              />
+            </svg>
+          </button>
+        </div>
+        <SyntaxHighlighter
+          style={prismStyle}
+          PreTag="div"
+          language={match[1]}
+          {...props}
+        >
+          {String(children).replace(/\n$/, "")}
+        </SyntaxHighlighter>
+      </>
+    ) : (
+      <code className={className ? className : ""} {...props}>
+        {children}
+      </code>
+    );
+  };
+
   return (
     <>
       <div
@@ -177,7 +239,10 @@ const ChatPanel: React.FC<ChatPanelProps  & ExtraProps> = ({
           {initialMessage && initialMessage !== "" ? (
             <div className="history-entry">
               <div className="response">
-                <ReactMarkdown className={markdownClass} remarkPlugins={[remarkGfm]}>
+                <ReactMarkdown
+                  className={markdownClass}
+                  remarkPlugins={[remarkGfm]}
+                >
                   {initialMessage}
                 </ReactMarkdown>
               </div>
@@ -193,7 +258,11 @@ const ChatPanel: React.FC<ChatPanelProps  & ExtraProps> = ({
                 {index === Object.keys(history).length - 1 && isLoading ? (
                   <div className="loading-text">loading...</div>
                 ) : null}
-                <ReactMarkdown className={markdownClass} remarkPlugins={[remarkGfm]} >
+                <ReactMarkdown
+                  className={markdownClass}
+                  remarkPlugins={[remarkGfm]}
+                  components={{ code: CodeBlock }}
+                >
                   {response}
                 </ReactMarkdown>
                 <div className="button-container">
