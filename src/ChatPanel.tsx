@@ -1,11 +1,13 @@
 import { LLMAsAServiceCustomer, useLLM } from "llmasaservice-client";
 import React, { useEffect, useRef, useState } from "react";
 import ReactMarkdown from "react-markdown";
+import remarkHtml from "remark-html";
+import rehypeRaw from "rehype-raw";
 import "./ChatPanel.css";
 import remarkGfm from "remark-gfm";
 import { Prism as SyntaxHighlighter } from "react-syntax-highlighter";
-import  PrismStyle  from "react-syntax-highlighter";
-import materialDark from 'react-syntax-highlighter/dist/cjs/styles/prism/material-dark.js';
+import PrismStyle from "react-syntax-highlighter";
+import materialDark from "react-syntax-highlighter/dist/cjs/styles/prism/material-dark.js";
 import materialLight from "react-syntax-highlighter/dist/cjs/styles/prism/material-light.js";
 
 export interface ChatPanelProps {
@@ -17,6 +19,7 @@ export interface ChatPanelProps {
   hideInitialPrompt?: boolean;
   customer?: LLMAsAServiceCustomer;
   messages?: { role: "user" | "assistant"; content: string }[];
+  data?: { key: string; data: string }[];
   thumbsUpClick?: () => void;
   thumbsDownClick?: () => void;
   theme?: "light" | "dark";
@@ -26,6 +29,18 @@ export interface ChatPanelProps {
   url?: string | null;
   scrollToEnd?: boolean;
   prismStyle?: PrismStyle;
+  service?: string | null;
+  historyChangedCallback?: (history: {
+    [key: string]: { content: string; callId: string };
+  }) => void;
+  promptTemplate?: string;
+  actions?: {
+    pattern: string;
+    type?: string;
+    markdown?: string;
+    callback?: (match: string) => void;
+    clickCode?: string;
+  }[];
 }
 
 interface ExtraProps extends React.HTMLAttributes<HTMLElement> {
@@ -40,6 +55,7 @@ const ChatPanel: React.FC<ChatPanelProps & ExtraProps> = ({
   hideInitialPrompt = true,
   customer = {} as LLMAsAServiceCustomer,
   messages = [],
+  data = [],
   thumbsUpClick,
   thumbsDownClick,
   theme = "light",
@@ -49,9 +65,13 @@ const ChatPanel: React.FC<ChatPanelProps & ExtraProps> = ({
   url = null,
   scrollToEnd = false,
   initialMessage = "",
-  prismStyle = theme === "light" ? materialLight: materialDark,
+  prismStyle = theme === "light" ? materialLight : materialDark,
+  service = null,
+  historyChangedCallback = null,
+  promptTemplate = "",
+  actions = [],
 }) => {
-  const { send, response, idle, stop } = useLLM({
+  const { send, response, idle, stop, lastCallId } = useLLM({
     project_id: project_id,
     customer: customer,
     url: url,
@@ -59,7 +79,9 @@ const ChatPanel: React.FC<ChatPanelProps & ExtraProps> = ({
 
   const [nextPrompt, setNextPrompt] = useState("");
   const [lastController, setLastController] = useState(new AbortController());
-  const [history, setHistory] = useState<{ [prompt: string]: string }>({});
+  const [history, setHistory] = useState<{
+    [prompt: string]: { content: string; callId: string };
+  }>({});
   const [isLoading, setIsLoading] = useState(false);
   const [lastPrompt, setLastPrompt] = useState<string | null>(null);
   const [hasScroll, setHasScroll] = useState(false);
@@ -73,10 +95,85 @@ const ChatPanel: React.FC<ChatPanelProps & ExtraProps> = ({
     if (response && response.length > 0) {
       setIsLoading(false);
 
+      let newResponse = response;
+
+      /*
+      [
+  {
+    "pattern": "any",
+    "htmlAction": "<a href=\"$1\">link</a>",
+    "type": "html"
+  }
+]
+
+[
+  {
+    "pattern": "any",
+    "markdown": "[$match]($1)",
+    "type": "markdown"
+  },
+  {
+    "pattern": "the",
+    "type": "button",
+    "clickCode": "alert(match);"
+  }
+]
+
+*/
+
+      // replace actions with links
+      if (actions && actions.length > 0) {
+        actions.forEach((action, index) => {
+          const regex = new RegExp(action.pattern, "g");
+          newResponse = newResponse.replace(regex, (match, ...groups) => {
+            const matchIndex = groups[groups.length - 2]; // The second-to-last argument is the match index
+
+            const buttonId = `button-${index}-${matchIndex}`;
+
+            let html = match;
+            if (action.type === "button" || action.type === "callback") {
+              const button = document.getElementById(buttonId);
+              if (!button) {
+                html = `<button id="${buttonId}">${match}</button>`;
+              }
+            } else if (action.type === "markdown") {
+              html = action.markdown ?? "";
+            }
+
+            html = html.replace("$match", match);
+            groups.forEach((group, index) => {
+              html = html.replace(`$${index + 1}`, group);
+            });
+
+            setTimeout(() => {
+              const button = document.getElementById(buttonId);
+              if (button) {
+                if (!button.onclick) {
+                  button.onclick = () => {
+                    if (action.callback) {
+                      action.callback(match);
+                    }
+                    if (action.clickCode) {
+                      try {
+                        const func = new Function("match", action.clickCode);
+                        func(match);
+                      } catch (error) {
+                        console.error("Error executing clickCode:", error);
+                      }
+                    }
+                  };
+                }
+              }
+            }, 0);
+            return html;
+          });
+        });
+      }
+
       setHistory((prevHistory) => {
         return {
           ...prevHistory,
-          [lastPrompt ?? ""]: response,
+          [lastPrompt ?? ""]: { content: newResponse, callId: lastCallId },
         };
       });
     }
@@ -95,7 +192,7 @@ const ChatPanel: React.FC<ChatPanelProps & ExtraProps> = ({
         if (lastController) stop(lastController);
         const controller = new AbortController();
 
-        send(initialPrompt, messages, true, true, null, controller);
+        send(initialPrompt, messages, data, true, true, service, controller);
         setLastPrompt(initialPrompt);
         setLastController(controller);
         setHistory({});
@@ -123,6 +220,12 @@ const ChatPanel: React.FC<ChatPanelProps & ExtraProps> = ({
     }
   }, [response, history]);
 
+  useEffect(() => {
+    if (historyChangedCallback) {
+      historyChangedCallback(history);
+    }
+  }, [history, historyChangedCallback]);
+
   const continueChat = () => {
     if (!idle) {
       stop(lastController);
@@ -130,7 +233,10 @@ const ChatPanel: React.FC<ChatPanelProps & ExtraProps> = ({
       setHistory((prevHistory) => {
         return {
           ...prevHistory,
-          [lastPrompt ?? ""]: response + "\n\n(response cancelled)",
+          [lastPrompt ?? ""]: {
+            content: response + "\n\n(response cancelled)",
+            callId: lastCallId,
+          },
         };
       });
 
@@ -143,25 +249,75 @@ const ChatPanel: React.FC<ChatPanelProps & ExtraProps> = ({
       // build the chat input from history
       const messagesAndHistory = messages;
       Object.entries(history).forEach(([prompt, response]) => {
-        messagesAndHistory.push({ role: "user", content: prompt });
-        messagesAndHistory.push({ role: "assistant", content: response });
+        let promptToSend = prompt;
+        if (promptTemplate && promptTemplate !== "") {
+          promptToSend = promptTemplate.replace("{{prompt}}", promptToSend);
+          for (let i = 0; i < data.length; i++) {
+            promptToSend = promptToSend.replace(
+              "{{" + data[i]?.key + "}}",
+              data[i]?.data ?? ""
+            );
+          }
+        }
+
+        messagesAndHistory.push({ role: "user", content: promptToSend });
+        messagesAndHistory.push({
+          role: "assistant",
+          content: response.content,
+        });
       });
 
       // set the history prompt with the about to be sent prompt
       setHistory((prevHistory) => {
         return {
           ...prevHistory,
-          [nextPrompt ?? ""]: "",
+          [nextPrompt ?? ""]: { content: "", callId: "" },
         };
       });
 
+      let promptToSend = nextPrompt;
+
+      // if this is the first user message, use the template. otherwise it is a follow-on question(s)
+
+      if (
+        (initialPrompt &&
+          initialPrompt !== "" &&
+          Object.keys(history).length === 1) ||
+        ((!initialPrompt || initialPrompt === "") &&
+          Object.keys(history).length === 0)
+      ) {
+        if (promptTemplate && promptTemplate !== "") {
+          promptToSend = promptTemplate.replace("{{prompt}}", nextPrompt);
+          for (let i = 0; i < data.length; i++) {
+            promptToSend = promptToSend.replace(
+              "{{" + data[i]?.key + "}}",
+              data[i]?.data ?? ""
+            );
+          }
+        }
+      }
+
       const controller = new AbortController();
-      send(nextPrompt, messagesAndHistory, true, true, null, controller);
+      send(
+        promptToSend,
+        messagesAndHistory,
+        data,
+        true,
+        true,
+        service,
+        controller
+      );
 
       setLastPrompt(nextPrompt);
       setLastController(controller);
       setNextPrompt("");
     }
+  };
+
+  const replaceHistory = (newHistory: {
+    [prompt: string]: { content: string; callId: string };
+  }) => {
+    setHistory(newHistory);
   };
 
   function copyToClipboard(text: string) {
@@ -242,6 +398,7 @@ const ChatPanel: React.FC<ChatPanelProps & ExtraProps> = ({
                 <ReactMarkdown
                   className={markdownClass}
                   remarkPlugins={[remarkGfm]}
+                  rehypePlugins={[rehypeRaw]}
                 >
                   {initialMessage}
                 </ReactMarkdown>
@@ -261,14 +418,15 @@ const ChatPanel: React.FC<ChatPanelProps & ExtraProps> = ({
                 <ReactMarkdown
                   className={markdownClass}
                   remarkPlugins={[remarkGfm]}
+                  rehypePlugins={[rehypeRaw]}
                   components={{ code: CodeBlock }}
                 >
-                  {response}
+                  {response.content}
                 </ReactMarkdown>
                 <div className="button-container">
                   <button
                     className="copy-button"
-                    onClick={() => copyToClipboard(response)}
+                    onClick={() => copyToClipboard(response.content)}
                   >
                     <svg
                       xmlns="http://www.w3.org/2000/svg"

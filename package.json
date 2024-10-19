@@ -1,6 +1,6 @@
 {
   "name": "llmasaservice-ui",
-  "version": "0.2.13",
+  "version": "0.3.4",
   "description": "Prebuilt UI components for LLMAsAService.io",
   "main": "dist/index.js",
   "module": "dist/index.mjs",
@@ -19,20 +19,20 @@
   "author": "Predictability at Scale",
   "license": "MIT",
   "devDependencies": {
-    "@chromatic-com/storybook": "^1.6.1",
-    "@storybook/addon-essentials": "^8.2.7",
-    "@storybook/addon-interactions": "^8.2.7",
-    "@storybook/addon-links": "^8.2.7",
-    "@storybook/addon-onboarding": "^8.2.7",
+    "@chromatic-com/storybook": "^2.0.2",
+    "@storybook/addon-essentials": "^8.3.6",
+    "@storybook/addon-interactions": "^8.3.6",
+    "@storybook/addon-links": "^8.3.6",
+    "@storybook/addon-onboarding": "^8.3.6",
     "@storybook/addon-webpack5-compiler-swc": "^1.0.5",
-    "@storybook/blocks": "^8.2.7",
-    "@storybook/react": "^8.2.7",
-    "@storybook/react-webpack5": "^8.2.7",
-    "@storybook/test": "^8.2.7",
+    "@storybook/blocks": "^8.3.6",
+    "@storybook/react": "^8.3.6",
+    "@storybook/react-webpack5": "^8.3.6",
+    "@storybook/test": "^8.3.6",
     "@types/react": "^18.3.3",
     "@types/react-syntax-highlighter": "^15.5.13",
     "react": "^18.3.1",
-    "storybook": "^8.2.7",
+    "storybook": "^8.3.6",
     "tsup": "^8.2.4",
     "typescript": "^5.5.4"
   },
@@ -44,10 +44,12 @@
     "chat"
   ],
   "dependencies": {
-    "llmasaservice-client": "^0.4.0",
+    "llmasaservice-client": "^0.5.0",
     "react-markdown": "^9.0.1",
     "react-syntax-highlighter": "^15.5.0",
-    "remark-gfm": "^4.0.0"
+    "rehype-raw": "^7.0.0",
+    "remark-gfm": "^4.0.0",
+    "remark-html": "^16.0.1"
   },
   "peerDependencies": {
     "react": "^18.3.0",
