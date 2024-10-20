@@ -98,13 +98,7 @@ const ChatPanel: React.FC<ChatPanelProps & ExtraProps> = ({
       let newResponse = response;
 
       /*
-      [
-  {
-    "pattern": "any",
-    "htmlAction": "<a href=\"$1\">link</a>",
-    "type": "html"
-  }
-]
+    
 
 [
   {
