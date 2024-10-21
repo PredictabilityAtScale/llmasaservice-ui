@@ -118,8 +118,12 @@ const ChatPanel: React.FC<ChatPanelProps & ExtraProps> = ({
       // replace actions with links
       if (actions && actions.length > 0) {
         actions.forEach((action, index) => {
-          const regex = new RegExp(action.pattern, "g");
+          const regex = new RegExp(action.pattern, "gmi");
           newResponse = newResponse.replace(regex, (match, ...groups) => {
+            
+            console.log("match", match);
+            console.log("groups", groups);
+
             const matchIndex = groups[groups.length - 2]; // The second-to-last argument is the match index
 
             const buttonId = `button-${index}-${matchIndex}`;
@@ -134,9 +138,9 @@ const ChatPanel: React.FC<ChatPanelProps & ExtraProps> = ({
               html = action.markdown ?? "";
             }
 
-            html = html.replace("$match", match);
+            html = html.replace(new RegExp("\\$match", "g"), match);
             groups.forEach((group, index) => {
-              html = html.replace(`$${index + 1}`, group);
+              html = html.replace(new RegExp(`\\$${index + 1}`, 'g'), group);
             });
 
             setTimeout(() => {
@@ -378,6 +382,15 @@ const ChatPanel: React.FC<ChatPanelProps & ExtraProps> = ({
     );
   };
 
+  // links should always open in a new tab
+  const CustomLink = ({ href, children, ...props }: any) => {
+    return (
+      <a href={href} target="_blank" rel="noopener noreferrer" {...props}>
+        {children}
+      </a>
+    );
+  };
+ 
   return (
     <>
       <div
@@ -413,7 +426,7 @@ const ChatPanel: React.FC<ChatPanelProps & ExtraProps> = ({
                   className={markdownClass}
                   remarkPlugins={[remarkGfm]}
                   rehypePlugins={[rehypeRaw]}
-                  components={{ code: CodeBlock }}
+                  components={{ /*a: CustomLink,*/ code: CodeBlock }}
                 >
                   {response.content}
                 </ReactMarkdown>

@@ -355,3 +355,11 @@
   border: 1px solid #ddd;
   padding: 8px;
 }
+
+.side-panel-dark a {
+  color: #ddd;
+}
+
+.side-panel-dark a:hover {
+  color: #fff;
+}
