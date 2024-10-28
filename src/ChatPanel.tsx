@@ -38,7 +38,7 @@ export interface ChatPanelProps {
     pattern: string;
     type?: string;
     markdown?: string;
-    callback?: (match: string) => void;
+    callback?: (match: string, groups: any[]) => void;
     clickCode?: string;
   }[];
 }
@@ -97,50 +97,28 @@ const ChatPanel: React.FC<ChatPanelProps & ExtraProps> = ({
 
       let newResponse = response;
 
-      /*
-    
-
-[
-  {
-    "pattern": "any",
-    "markdown": "[$match]($1)",
-    "type": "markdown"
-  },
-  {
-    "pattern": "the",
-    "type": "button",
-    "clickCode": "alert(match);"
-  }
-]
-
-*/
-
       // replace actions with links
       if (actions && actions.length > 0) {
         actions.forEach((action, index) => {
           const regex = new RegExp(action.pattern, "gmi");
           newResponse = newResponse.replace(regex, (match, ...groups) => {
-            
-            console.log("match", match);
-            console.log("groups", groups);
+            console.log("action match", match, groups);
 
             const matchIndex = groups[groups.length - 2]; // The second-to-last argument is the match index
-
-            const buttonId = `button-${index}-${matchIndex}`;
+            const buttonId = `button-${messages.length}-${index}-${matchIndex}`; // a unique button for the conversation level, action index, match index
 
             let html = match;
             if (action.type === "button" || action.type === "callback") {
-              const button = document.getElementById(buttonId);
-              if (!button) {
-                html = `<button id="${buttonId}">${match}</button>`;
-              }
-            } else if (action.type === "markdown") {
+              html = `<button id="${buttonId}">${
+                action.markdown ?? match
+              }</button>`;
+            } else if (action.type === "markdown" || action.type === "html") {
               html = action.markdown ?? "";
             }
 
             html = html.replace(new RegExp("\\$match", "g"), match);
             groups.forEach((group, index) => {
-              html = html.replace(new RegExp(`\\$${index + 1}`, 'g'), group);
+              html = html.replace(new RegExp(`\\$${index + 1}`, "g"), group);
             });
 
             setTimeout(() => {
@@ -149,7 +127,7 @@ const ChatPanel: React.FC<ChatPanelProps & ExtraProps> = ({
                 if (!button.onclick) {
                   button.onclick = () => {
                     if (action.callback) {
-                      action.callback(match);
+                      action.callback(match, groups);
                     }
                     if (action.clickCode) {
                       try {
@@ -163,6 +141,7 @@ const ChatPanel: React.FC<ChatPanelProps & ExtraProps> = ({
                 }
               }
             }, 0);
+
             return html;
           });
         });
@@ -390,7 +369,7 @@ const ChatPanel: React.FC<ChatPanelProps & ExtraProps> = ({
       </a>
     );
   };
- 
+
   return (
     <>
       <div
