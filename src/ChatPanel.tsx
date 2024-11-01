@@ -3,6 +3,7 @@ import React, { useEffect, useRef, useState } from "react";
 import ReactMarkdown from "react-markdown";
 import remarkHtml from "remark-html";
 import rehypeRaw from "rehype-raw";
+import ReactDOMServer from "react-dom/server";
 import "./ChatPanel.css";
 import remarkGfm from "remark-gfm";
 import { Prism as SyntaxHighlighter } from "react-syntax-highlighter";
@@ -41,6 +42,11 @@ export interface ChatPanelProps {
     callback?: (match: string, groups: any[]) => void;
     clickCode?: string;
   }[];
+  showSaveButton?: boolean;
+  followOnQuestions?: string[];
+  clearFollowOnQuestionsNextPrompt?: boolean;
+  followOnPrompt?: string;
+  showPoweredBy?: boolean;
 }
 
 interface ExtraProps extends React.HTMLAttributes<HTMLElement> {
@@ -70,6 +76,11 @@ const ChatPanel: React.FC<ChatPanelProps & ExtraProps> = ({
   historyChangedCallback = null,
   promptTemplate = "",
   actions = [],
+  showSaveButton = true,
+  followOnQuestions = [],
+  clearFollowOnQuestionsNextPrompt = false,
+  followOnPrompt = "",
+  showPoweredBy = true,
 }) => {
   const { send, response, idle, stop, lastCallId } = useLLM({
     project_id: project_id,
@@ -87,6 +98,9 @@ const ChatPanel: React.FC<ChatPanelProps & ExtraProps> = ({
   const [hasScroll, setHasScroll] = useState(false);
   const bottomRef = useRef<HTMLDivElement | null>(null);
   const [isAtBottom, setIsAtBottom] = useState(true);
+  const [lastFollowOnPrompt, setLastFollowOnPrompt] = useState<string | null>(
+    null
+  );
 
   const responseAreaRef = useRef(null);
 
@@ -203,7 +217,18 @@ const ChatPanel: React.FC<ChatPanelProps & ExtraProps> = ({
     }
   }, [history, historyChangedCallback]);
 
-  const continueChat = () => {
+  useEffect(() => {
+    if (
+      followOnPrompt &&
+      followOnPrompt !== "" &&
+      (lastFollowOnPrompt ?? "") !== followOnPrompt
+    ) {
+      continueChat(followOnPrompt);
+      setLastFollowOnPrompt(followOnPrompt);
+    }
+  }, [followOnPrompt]);
+
+  const continueChat = (suggestion?: string) => {
     if (!idle) {
       stop(lastController);
 
@@ -220,7 +245,20 @@ const ChatPanel: React.FC<ChatPanelProps & ExtraProps> = ({
       return;
     }
 
-    if (nextPrompt && nextPrompt !== "") {
+    if (clearFollowOnQuestionsNextPrompt) {
+      followOnQuestions = [];
+      const suggestionsContainer = document.querySelector(
+        ".suggestions-container"
+      );
+      if (suggestionsContainer) {
+        suggestionsContainer.innerHTML = "";
+      }
+    }
+
+    if (
+      (suggestion && suggestion !== "") ||
+      (nextPrompt && nextPrompt !== "")
+    ) {
       setIsLoading(true);
 
       // build the chat input from history
@@ -244,18 +282,17 @@ const ChatPanel: React.FC<ChatPanelProps & ExtraProps> = ({
         });
       });
 
+      let nextPromptToSend = suggestion ?? nextPrompt;
+
       // set the history prompt with the about to be sent prompt
       setHistory((prevHistory) => {
         return {
           ...prevHistory,
-          [nextPrompt ?? ""]: { content: "", callId: "" },
+          [nextPromptToSend ?? ""]: { content: "", callId: "" },
         };
       });
 
-      let promptToSend = nextPrompt;
-
       // if this is the first user message, use the template. otherwise it is a follow-on question(s)
-
       if (
         (initialPrompt &&
           initialPrompt !== "" &&
@@ -264,9 +301,12 @@ const ChatPanel: React.FC<ChatPanelProps & ExtraProps> = ({
           Object.keys(history).length === 0)
       ) {
         if (promptTemplate && promptTemplate !== "") {
-          promptToSend = promptTemplate.replace("{{prompt}}", nextPrompt);
+          nextPromptToSend = promptTemplate.replace(
+            "{{prompt}}",
+            nextPromptToSend
+          );
           for (let i = 0; i < data.length; i++) {
-            promptToSend = promptToSend.replace(
+            nextPromptToSend = nextPromptToSend.replace(
               "{{" + data[i]?.key + "}}",
               data[i]?.data ?? ""
             );
@@ -276,7 +316,7 @@ const ChatPanel: React.FC<ChatPanelProps & ExtraProps> = ({
 
       const controller = new AbortController();
       send(
-        promptToSend,
+        nextPromptToSend,
         messagesAndHistory,
         data,
         true,
@@ -285,7 +325,7 @@ const ChatPanel: React.FC<ChatPanelProps & ExtraProps> = ({
         controller
       );
 
-      setLastPrompt(nextPrompt);
+      setLastPrompt(nextPromptToSend);
       setLastController(controller);
       setNextPrompt("");
     }
@@ -368,6 +408,112 @@ const ChatPanel: React.FC<ChatPanelProps & ExtraProps> = ({
         {children}
       </a>
     );
+  };
+
+  const convertMarkdownToHTML = (markdown: string): string => {
+    const html = ReactDOMServer.renderToStaticMarkup(
+      <ReactMarkdown
+        className={markdownClass}
+        remarkPlugins={[remarkGfm]}
+        rehypePlugins={[rehypeRaw]}
+      >
+        {markdown}
+      </ReactMarkdown>
+    );
+    return html;
+  };
+
+  const convertHistoryToHTML = (history: {
+    [prompt: string]: { callId: string; content: string };
+  }): string => {
+    const stylesheet = `
+  <style>
+    .conversation-history {
+      font-family: Arial, sans-serif;
+      line-height: 1;
+    }
+    .history-entry {
+      margin-bottom: 15px;
+      display: flex;
+      flex-direction: column;
+    }
+    .prompt-container, .response-container {
+      display: flex;
+      flex-direction: column;
+      margin-bottom: 3px;
+    }
+    .prompt {
+      background-color: #efefef;
+      padding: 5px;
+      border-radius: 5px;
+      max-width: 80%;
+      margin-left: 0;
+    }
+    .response {
+      background-color: #f0fcfd;
+      padding: 5px;
+      border-radius: 5px;
+      max-width: 80%;
+      margin-left: 25px;
+    }
+  </style>
+`;
+
+    let html = `
+    <html>
+      <head>
+        ${stylesheet}
+      </head>
+      <body>
+        <h1>Conversation History (${new Date().toLocaleString()})</h1>
+        <div class="conversation-history">
+  `;
+
+    Object.entries(history).forEach(([prompt, response], index) => {
+      if (hideInitialPrompt && index === 0) {
+        return;
+      }
+
+      html += `
+      <div class="history-entry">
+        <div class="prompt-container">
+          <div class="prompt">${convertMarkdownToHTML(prompt)}</div>
+        </div>
+        <div class="response-container">
+          <div class="response">${convertMarkdownToHTML(response.content)}</div>
+        </div>
+      </div>
+    `;
+    });
+
+    html += `
+        </div>
+      </body>
+    </html>
+  `;
+
+    return html;
+  };
+
+  const saveHTMLToFile = (html: string, filename: string) => {
+    const blob = new Blob([html], { type: "text/html" });
+    const link = document.createElement("a");
+    link.href = URL.createObjectURL(blob);
+    link.download = filename;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  };
+
+  const shareViaEmail = (html: string, subject: string) => {
+    const mailtoLink = `mailto:?subject=${encodeURIComponent(
+      subject
+    )}&body=${encodeURIComponent(html)}`;
+    window.location.href = mailtoLink;
+  };
+
+  const handleSuggestionClick = (suggestion: string) => {
+    continueChat(suggestion);
   };
 
   return (
@@ -463,6 +609,22 @@ const ChatPanel: React.FC<ChatPanelProps & ExtraProps> = ({
               </div>
             </div>
           ))}
+
+          {followOnQuestions && followOnQuestions.length > 0 && (
+            <div className="suggestions-container">
+              {followOnQuestions.map((question, index) => (
+                <button
+                  key={index}
+                  className="suggestion-button"
+                  onClick={() => handleSuggestionClick(question)}
+                  disabled={!idle}
+                >
+                  {question}
+                </button>
+              ))}
+            </div>
+          )}
+
           <div ref={bottomRef} />
           {hasScroll && !isAtBottom && (
             <button className="scroll-button" onClick={scrollToBottom}>
@@ -470,6 +632,19 @@ const ChatPanel: React.FC<ChatPanelProps & ExtraProps> = ({
             </button>
           )}
         </div>
+        {showSaveButton && (
+          <button
+            className="save-button"
+            onClick={() =>
+              saveHTMLToFile(
+                convertHistoryToHTML(history),
+                `conversation-${new Date().toISOString()}.html`
+              )
+            }
+          >
+            Save Conversation
+          </button>
+        )}
 
         <div className="input-container">
           <textarea
@@ -483,7 +658,7 @@ const ChatPanel: React.FC<ChatPanelProps & ExtraProps> = ({
               }
             }}
           ></textarea>
-          <button className="send-button" onClick={continueChat}>
+          <button className="send-button" onClick={() => continueChat()}>
             {idle ? (
               <svg
                 xmlns="http://www.w3.org/2000/svg"
@@ -513,6 +688,154 @@ const ChatPanel: React.FC<ChatPanelProps & ExtraProps> = ({
             )}
           </button>
         </div>
+        {showPoweredBy && (
+          <div>
+            <div className="powered-by">
+              <svg
+                width="16"
+                height="16"
+                viewBox="0 0 72 72"
+                fill="none"
+                xmlns="http://www.w3.org/2000/svg"
+              >
+                <ellipse
+                  cx="14.0868"
+                  cy="59.2146"
+                  rx="7.8261"
+                  ry="7.7854"
+                  fill="#2487D8"
+                />
+                <ellipse
+                  cx="24.9013"
+                  cy="43.0776"
+                  rx="6.11858"
+                  ry="6.08676"
+                  fill="#2487D8"
+                />
+                <ellipse
+                  cx="45.391"
+                  cy="43.0776"
+                  rx="6.11858"
+                  ry="6.08676"
+                  fill="#2487D8"
+                />
+                <ellipse
+                  cx="65.8813"
+                  cy="43.0776"
+                  rx="6.11858"
+                  ry="6.08676"
+                  fill="#2487D8"
+                />
+                <ellipse
+                  cx="13.9444"
+                  cy="30.4795"
+                  rx="4.83795"
+                  ry="4.81279"
+                  fill="#2487D8"
+                />
+                <ellipse
+                  cx="34.7193"
+                  cy="30.4795"
+                  rx="4.83795"
+                  ry="4.81279"
+                  fill="#2487D8"
+                />
+                <ellipse
+                  cx="55.4942"
+                  cy="30.4795"
+                  rx="4.83795"
+                  ry="4.81279"
+                  fill="#2487D8"
+                />
+                <ellipse
+                  cx="3.27273"
+                  cy="20.4293"
+                  rx="3.27273"
+                  ry="3.25571"
+                  fill="#2487D8"
+                />
+                <ellipse
+                  cx="24.9011"
+                  cy="20.4293"
+                  rx="3.27273"
+                  ry="3.25571"
+                  fill="#2487D8"
+                />
+                <ellipse
+                  cx="45.3914"
+                  cy="20.4293"
+                  rx="3.27273"
+                  ry="3.25571"
+                  fill="#2487D8"
+                />
+                <ellipse
+                  cx="12.2373"
+                  cy="13.4931"
+                  rx="1.70751"
+                  ry="1.69863"
+                  fill="#2487D8"
+                />
+                <ellipse
+                  cx="33.0122"
+                  cy="13.4931"
+                  rx="1.70751"
+                  ry="1.69863"
+                  fill="#2487D8"
+                />
+                <ellipse
+                  cx="53.5019"
+                  cy="13.4931"
+                  rx="1.70751"
+                  ry="1.69863"
+                  fill="#2487D8"
+                />
+                <ellipse
+                  cx="19.3517"
+                  cy="6.13242"
+                  rx="1.13834"
+                  ry="1.13242"
+                  fill="#2487D8"
+                />
+                <ellipse
+                  cx="40.1266"
+                  cy="6.13242"
+                  rx="1.13834"
+                  ry="1.13242"
+                  fill="#2487D8"
+                />
+                <ellipse
+                  cx="60.901"
+                  cy="6.13242"
+                  rx="1.13834"
+                  ry="1.13242"
+                  fill="#2487D8"
+                />
+                <ellipse
+                  cx="34.8617"
+                  cy="59.2146"
+                  rx="7.8261"
+                  ry="7.7854"
+                  fill="#2487D8"
+                />
+                <ellipse
+                  cx="55.6366"
+                  cy="59.2146"
+                  rx="7.8261"
+                  ry="7.7854"
+                  fill="#ED7D31"
+                />
+              </svg>{" "}
+              &nbsp;&nbsp;powered by&nbsp;
+              <a
+                href="https://llmasaservice.io"
+                target="_blank"
+                rel="noopener noreferrer"
+              >
+                llmasaservice.io
+              </a>
+            </div>
+          </div>
+        )}
       </div>
     </>
   );
