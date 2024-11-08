@@ -471,10 +471,17 @@ const ChatPanel: React.FC<ChatPanelProps & ExtraProps> = ({
 
     Object.entries(history).forEach(([prompt, response], index) => {
       if (hideInitialPrompt && index === 0) {
-        return;
-      }
-
-      html += `
+        html += `
+        <div class="history-entry">
+          <div class="response-container">
+            <div class="response">${convertMarkdownToHTML(
+              response.content
+            )}</div>
+          </div>
+        </div>
+      `;
+      } else {
+        html += `
       <div class="history-entry">
         <div class="prompt-container">
           <div class="prompt">${convertMarkdownToHTML(prompt)}</div>
@@ -484,6 +491,7 @@ const ChatPanel: React.FC<ChatPanelProps & ExtraProps> = ({
         </div>
       </div>
     `;
+      }
     });
 
     html += `
@@ -537,6 +545,7 @@ const ChatPanel: React.FC<ChatPanelProps & ExtraProps> = ({
               </div>
             </div>
           ) : null}
+
           {Object.entries(history).map(([prompt, response], index) => (
             <div className="history-entry" key={index}>
               {hideInitialPrompt && index === 0 ? null : (

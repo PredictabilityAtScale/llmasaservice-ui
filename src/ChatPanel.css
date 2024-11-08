@@ -188,7 +188,8 @@
   border: none;
   border-radius: 8px;
   cursor: pointer;
-  padding: 10px;
+  padding: 5px 10px;
+  font-size: 0.8em;
   margin-top: 5px;
 }
 
@@ -407,7 +408,8 @@
   border: none;
   border-radius: 8px;
   cursor: pointer;
-  padding: 10px;
+  padding: 5px 10px;
+  font-size: 0.8em;
   margin-top: 5px;
 }
 
