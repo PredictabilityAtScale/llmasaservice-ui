@@ -10,6 +10,7 @@ import { Prism as SyntaxHighlighter } from "react-syntax-highlighter";
 import PrismStyle from "react-syntax-highlighter";
 import materialDark from "react-syntax-highlighter/dist/cjs/styles/prism/material-dark.js";
 import materialLight from "react-syntax-highlighter/dist/cjs/styles/prism/material-light.js";
+import EmailModal from "./EmailModal";
 
 export interface ChatPanelProps {
   project_id: string;
@@ -43,6 +44,7 @@ export interface ChatPanelProps {
     clickCode?: string;
   }[];
   showSaveButton?: boolean;
+  showEmailButton?: boolean;
   followOnQuestions?: string[];
   clearFollowOnQuestionsNextPrompt?: boolean;
   followOnPrompt?: string;
@@ -77,6 +79,7 @@ const ChatPanel: React.FC<ChatPanelProps & ExtraProps> = ({
   promptTemplate = "",
   actions = [],
   showSaveButton = true,
+  showEmailButton = true,
   followOnQuestions = [],
   clearFollowOnQuestionsNextPrompt = false,
   followOnPrompt = "",
@@ -98,6 +101,11 @@ const ChatPanel: React.FC<ChatPanelProps & ExtraProps> = ({
   const [hasScroll, setHasScroll] = useState(false);
   const bottomRef = useRef<HTMLDivElement | null>(null);
   const [isAtBottom, setIsAtBottom] = useState(true);
+  const [isEmailModalOpen, setIsEmailModalOpen] = useState(false);
+
+  const handleSendEmail = (to: string, from:string) => {
+    sendConversationsViaEmail(to, `Conversation History from ${title}`, from);
+  };
 
   const responseAreaRef = useRef(null);
 
@@ -216,10 +224,7 @@ const ChatPanel: React.FC<ChatPanelProps & ExtraProps> = ({
 
   useEffect(() => {
     console.log("followOnPromptChanged", followOnPrompt);
-    if (
-      followOnPrompt &&
-      followOnPrompt !== "" 
-    ) {
+    if (followOnPrompt && followOnPrompt !== "") {
       continueChat(followOnPrompt);
     }
   }, [followOnPrompt]);
@@ -531,6 +536,29 @@ const ChatPanel: React.FC<ChatPanelProps & ExtraProps> = ({
     publicAPIUrl = "https://duzyq4e8ql.execute-api.us-east-1.amazonaws.com/dev";
   }
 
+  const sendConversationsViaEmail = (
+    to: string,
+    subject: string = `Conversation History from ${title}`,
+    from: string = ""
+  ) => {
+    fetch(`${publicAPIUrl}/share/email`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        to: to,
+        from: from,
+        subject: subject,
+        html: convertHistoryToHTML(history),
+        project_id: project_id ?? "",
+        customer: customer,
+        history: history,
+        title: title,
+      }),
+    });
+  };
+
   const defaultThumbsUpClick = (callId: string) => {
     console.log("thumbs up", callId);
     fetch(`${publicAPIUrl}/feedback/${callId}/thumbsup`, {
@@ -686,19 +714,35 @@ const ChatPanel: React.FC<ChatPanelProps & ExtraProps> = ({
             </button>
           )}
         </div>
-        {showSaveButton && (
-          <button
-            className="save-button"
-            onClick={() =>
-              saveHTMLToFile(
-                convertHistoryToHTML(history),
-                `conversation-${new Date().toISOString()}.html`
-              )
-            }
-          >
-            Save Conversation
-          </button>
-        )}
+        <div className="button-container-actions">
+          {showSaveButton && (
+            <button
+              className="save-button"
+              onClick={() =>
+                saveHTMLToFile(
+                  convertHistoryToHTML(history),
+                  `conversation-${new Date().toISOString()}.html`
+                )
+              }
+            >
+              Save Conversation
+            </button>
+          )}
+          {showEmailButton && (
+            <button
+              className="save-button"
+              onClick={() => setIsEmailModalOpen(true)}
+            >
+              Email Conversation
+            </button>
+          )}
+        </div>
+
+        <EmailModal
+          isOpen={isEmailModalOpen}
+          onClose={() => setIsEmailModalOpen(false)}
+          onSend={handleSendEmail}
+        />
 
         <div className="input-container">
           <textarea
