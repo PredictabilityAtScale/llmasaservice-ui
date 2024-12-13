@@ -344,7 +344,21 @@ const ChatPanel: React.FC<ChatPanelProps & ExtraProps> = ({
   }
 
   const scrollToBottom = () => {
-    bottomRef.current?.scrollIntoView({ behavior: "smooth" });
+    //bottomRef.current?.scrollIntoView({ behavior: "smooth" });
+    if (window.top !== window.self) {
+      // If the ChatPanel is within an iframe
+      bottomRef.current?.scrollIntoView({ behavior: "smooth" });
+      const frameElement = window.frameElement;
+      if (frameElement) {
+        window.parent.scrollTo({
+          top: frameElement.getBoundingClientRect().top + window.scrollY,
+          behavior: "smooth",
+        });
+      }
+    } else {
+      // If the ChatPanel is not within an iframe
+      bottomRef.current?.scrollIntoView({ behavior: "smooth" });
+    }
   };
 
   const CodeBlock = ({ node, className, children, style, ...props }: any) => {
