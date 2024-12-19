@@ -114,6 +114,7 @@ const ChatPanel: React.FC<ChatPanelProps & ExtraProps> = ({
   }>({});
   const [isLoading, setIsLoading] = useState(false);
   const [lastPrompt, setLastPrompt] = useState<string | null>(null);
+  const [lastKey, setLastKey] = useState<string | null>(null);
   const [hasScroll, setHasScroll] = useState(false);
   const bottomRef = useRef<HTMLDivElement | null>(null);
   const bottomPanelRef = useRef<HTMLDivElement | null>(null);
@@ -211,7 +212,7 @@ const ChatPanel: React.FC<ChatPanelProps & ExtraProps> = ({
       setHistory((prevHistory) => {
         return {
           ...prevHistory,
-          [lastPrompt ?? ""]: { content: newResponse, callId: lastCallId },
+          [lastKey ?? ""]: { content: newResponse, callId: lastCallId },
         };
       });
     }
@@ -241,6 +242,7 @@ const ChatPanel: React.FC<ChatPanelProps & ExtraProps> = ({
           controller
         );
         setLastPrompt(initialPrompt);
+        setLastKey(initialPrompt);
         setLastController(controller);
         setHistory({});
       }
@@ -297,7 +299,7 @@ const ChatPanel: React.FC<ChatPanelProps & ExtraProps> = ({
       setHistory((prevHistory) => {
         return {
           ...prevHistory,
-          [lastPrompt ?? ""]: {
+          [lastKey ?? ""]: {
             content: response + "\n\n(response cancelled)",
             callId: lastCallId,
           },
@@ -346,11 +348,26 @@ const ChatPanel: React.FC<ChatPanelProps & ExtraProps> = ({
 
       let nextPromptToSend = suggestion ?? nextPrompt;
 
+      let promptKey = nextPromptToSend ?? "";
+      let lastPromptKeyCharacter = promptKey[promptKey.length - 1] ?? "";
+
+      const count = Object.keys(history).filter((key) => {
+        return (
+          key.startsWith(promptKey) &&
+          promptKey.length > 0 &&
+          (key.endsWith(lastPromptKeyCharacter) || key.endsWith(")")) // the first or subsequent identical prompt beginnings
+        );
+      }).length;
+
+      if (count > 0) {
+        promptKey += ` (${count + 1})`;
+      }
+
       // set the history prompt with the about to be sent prompt
       setHistory((prevHistory) => {
         return {
           ...prevHistory,
-          [nextPromptToSend ?? ""]: { content: "", callId: "" },
+          [promptKey ?? ""]: { content: "", callId: "" },
         };
       });
 
@@ -389,6 +406,7 @@ const ChatPanel: React.FC<ChatPanelProps & ExtraProps> = ({
       );
 
       setLastPrompt(nextPromptToSend);
+      setLastKey(promptKey);
       setLastController(controller);
       setNextPrompt("");
     }
