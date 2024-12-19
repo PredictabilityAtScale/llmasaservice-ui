@@ -11,6 +11,7 @@ import PrismStyle from "react-syntax-highlighter";
 import materialDark from "react-syntax-highlighter/dist/cjs/styles/prism/material-dark.js";
 import materialLight from "react-syntax-highlighter/dist/cjs/styles/prism/material-light.js";
 import EmailModal from "./EmailModal";
+import CallToActionlModal from "./CallToActionModal";
 
 export interface ChatPanelProps {
   project_id: string;
@@ -49,6 +50,13 @@ export interface ChatPanelProps {
   clearFollowOnQuestionsNextPrompt?: boolean;
   followOnPrompt?: string;
   showPoweredBy?: boolean;
+  agent?: string | null;
+  conversation?: string | null;
+  showCallToAction?: boolean;
+  callToActionButtonText?: string;
+  callToActionEmailAddress?: string;
+  callToActionEmailSubject?: string;
+  callToActionMustSendEmail?: boolean;
 }
 
 interface ExtraProps extends React.HTMLAttributes<HTMLElement> {
@@ -84,11 +92,19 @@ const ChatPanel: React.FC<ChatPanelProps & ExtraProps> = ({
   clearFollowOnQuestionsNextPrompt = false,
   followOnPrompt = "",
   showPoweredBy = true,
+  agent = null,
+  conversation = null,
+  showCallToAction = false,
+  callToActionButtonText = "Submit",
+  callToActionEmailAddress = "",
+  callToActionEmailSubject = "Agent CTA submitted",
+  callToActionMustSendEmail = false,
 }) => {
   const { send, response, idle, stop, lastCallId } = useLLM({
     project_id: project_id,
     customer: customer,
     url: url,
+    agent: agent,
   });
 
   const [nextPrompt, setNextPrompt] = useState("");
@@ -100,14 +116,40 @@ const ChatPanel: React.FC<ChatPanelProps & ExtraProps> = ({
   const [lastPrompt, setLastPrompt] = useState<string | null>(null);
   const [hasScroll, setHasScroll] = useState(false);
   const bottomRef = useRef<HTMLDivElement | null>(null);
+  const bottomPanelRef = useRef<HTMLDivElement | null>(null);
   const [isAtBottom, setIsAtBottom] = useState(true);
   const [isEmailModalOpen, setIsEmailModalOpen] = useState(false);
+  const [isCallToActionModalOpen, setIsCallToActionModalOpen] = useState(false);
+  const [hasSentCallToActionEmail, setHasSentCallToActionEmail] =
+    useState(false);
 
-  const handleSendEmail = (to: string, from:string) => {
+  const handleSendEmail = (to: string, from: string) => {
     sendConversationsViaEmail(to, `Conversation History from ${title}`, from);
   };
 
   const responseAreaRef = useRef(null);
+
+  useEffect(() => {
+    const handleBeforeUnload = (event: BeforeUnloadEvent) => {
+      if (
+        callToActionMustSendEmail &&
+        showCallToAction &&
+        callToActionEmailAddress &&
+        callToActionEmailAddress !== "" &&
+        !hasSentCallToActionEmail
+      ) {
+        event.preventDefault();
+        event.returnValue = ""; // Chrome requires returnValue to be set
+        setIsCallToActionModalOpen(true);
+      }
+    };
+
+    window.addEventListener("beforeunload", handleBeforeUnload);
+
+    return () => {
+      window.removeEventListener("beforeunload", handleBeforeUnload);
+    };
+  }, []);
 
   // response change. Update the history
   useEffect(() => {
@@ -188,7 +230,16 @@ const ChatPanel: React.FC<ChatPanelProps & ExtraProps> = ({
         if (lastController) stop(lastController);
         const controller = new AbortController();
 
-        send(initialPrompt, messages, data, true, true, service, controller);
+        send(
+          initialPrompt,
+          messages,
+          data,
+          true,
+          true,
+          service,
+          conversation,
+          controller
+        );
         setLastPrompt(initialPrompt);
         setLastController(controller);
         setHistory({});
@@ -198,7 +249,16 @@ const ChatPanel: React.FC<ChatPanelProps & ExtraProps> = ({
 
   useEffect(() => {
     if (scrollToEnd) {
-      bottomRef.current?.scrollIntoView({ behavior: "smooth" });
+      if (window.top !== window.self) {
+        const responseArea = responseAreaRef.current as any;
+        responseArea.scrollTo({
+          top: responseArea.scrollHeight,
+          behavior: "smooth",
+        });
+      } else {
+        // If the ChatPanel is not within an iframe
+        bottomRef.current?.scrollIntoView({ behavior: "smooth", block: "end" });
+      }
     } else {
       const responseArea = responseAreaRef.current as any;
       if (responseArea) {
@@ -324,6 +384,7 @@ const ChatPanel: React.FC<ChatPanelProps & ExtraProps> = ({
         true,
         true,
         service,
+        conversation,
         controller
       );
 
@@ -344,23 +405,16 @@ const ChatPanel: React.FC<ChatPanelProps & ExtraProps> = ({
   }
 
   const scrollToBottom = () => {
-    bottomRef.current?.scrollIntoView({ behavior: "smooth", block: "end" });
-    
-    /*
     if (window.top !== window.self) {
-      // If the ChatPanel is within an iframe
-      bottomRef.current?.scrollIntoView({ behavior: "smooth" });
-      const frameElement = window.frameElement;
-      if (frameElement) {
-        window.parent.scrollTo({
-          top: frameElement.getBoundingClientRect().top + window.scrollY,
-          behavior: "smooth",
-        });
-      }
+      const responseArea = responseAreaRef.current as any;
+      responseArea.scrollTo({
+        top: responseArea.scrollHeight,
+        behavior: "smooth",
+      });
     } else {
       // If the ChatPanel is not within an iframe
       bottomRef.current?.scrollIntoView({ behavior: "smooth" });
-    }*/
+    }
   };
 
   const CodeBlock = ({ node, className, children, style, ...props }: any) => {
@@ -445,36 +499,33 @@ const ChatPanel: React.FC<ChatPanelProps & ExtraProps> = ({
     [prompt: string]: { callId: string; content: string };
   }): string => {
     const stylesheet = `
-  <style>
-    .conversation-history {
-      font-family: Arial, sans-serif;
-      line-height: 1;
-    }
-    .history-entry {
-      margin-bottom: 15px;
-      display: flex;
-      flex-direction: column;
-    }
-    .prompt-container, .response-container {
-      display: flex;
-      flex-direction: column;
-      margin-bottom: 3px;
-    }
-    .prompt {
-      background-color: #efefef;
-      padding: 5px;
-      border-radius: 5px;
-      max-width: 80%;
-      margin-left: 0;
-    }
-    .response {
-      background-color: #f0fcfd;
-      padding: 5px;
-      border-radius: 5px;
-      max-width: 80%;
-      margin-left: 25px;
-    }
-  </style>
+        <style>
+      .conversation-history {
+        font-family: Arial, sans-serif;
+        line-height: 1.5; /* Slightly increase line height for readability */
+      }
+      .history-entry {
+        margin-bottom: 15px;
+      }
+      .prompt-container, .response-container {
+        margin-bottom: 10px; /* Adjusted spacing */
+      }
+      .prompt, .response {
+        display: block; /* Ensure they take up the full row */
+        margin: 5px 0; /* Add vertical spacing */
+        padding: 10px; /* Increase padding for better spacing */
+        border-radius: 5px;
+        max-width: 80%; /* Keep width constrained */
+      }
+      .prompt {
+        background-color: #efefef;
+        margin-left: 0; /* Align to the left */
+      }
+      .response {
+        background-color: #f0fcfd;
+        margin-left: 25px; /* Indent slightly for visual differentiation */
+      }
+    </style>
 `;
 
     let html = `
@@ -573,6 +624,29 @@ const ChatPanel: React.FC<ChatPanelProps & ExtraProps> = ({
         title: title,
       }),
     });
+  };
+
+  const sendCallToActionEmail = async (from: string) => {
+    const r = await fetch(`${publicAPIUrl}/share/email`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        to: callToActionEmailAddress,
+        from: from,
+        subject: `${callToActionEmailSubject} from ${from}`,
+        html: convertHistoryToHTML(history),
+        project_id: project_id ?? "",
+        customer: customer,
+        history: history,
+        title: title,
+      }),
+    });
+
+    if (r.ok) {
+      setHasSentCallToActionEmail(true);
+    }
   };
 
   const defaultThumbsUpClick = (callId: string) => {
@@ -708,7 +782,7 @@ const ChatPanel: React.FC<ChatPanelProps & ExtraProps> = ({
             </div>
           ))}
 
-          {followOnQuestions && followOnQuestions.length > 0 && (
+          {followOnQuestions && followOnQuestions.length > 0 && idle && (
             <div className="suggestions-container">
               {followOnQuestions.map((question, index) => (
                 <button
@@ -724,6 +798,7 @@ const ChatPanel: React.FC<ChatPanelProps & ExtraProps> = ({
           )}
 
           <div ref={bottomRef} />
+
           {hasScroll && !isAtBottom && (
             <button className="scroll-button" onClick={scrollToBottom}>
               ↓
@@ -752,12 +827,29 @@ const ChatPanel: React.FC<ChatPanelProps & ExtraProps> = ({
               Email Conversation
             </button>
           )}
+
+          {showCallToAction && callToActionEmailAddress && (
+            <button
+              className="save-button"
+              onClick={() => setIsCallToActionModalOpen(true)}
+            >
+              {callToActionButtonText}
+            </button>
+          )}
         </div>
 
         <EmailModal
           isOpen={isEmailModalOpen}
+          defaultEmail={customer.customer_user_email}
           onClose={() => setIsEmailModalOpen(false)}
           onSend={handleSendEmail}
+        />
+
+        <CallToActionlModal
+          isOpen={isCallToActionModalOpen}
+          defaultEmail={customer.customer_user_email}
+          onClose={() => setIsCallToActionModalOpen(false)}
+          onSend={sendCallToActionEmail}
         />
 
         <div className="input-container">
@@ -951,6 +1043,7 @@ const ChatPanel: React.FC<ChatPanelProps & ExtraProps> = ({
           </div>
         )}
       </div>
+      <div ref={bottomPanelRef} />
     </>
   );
 };

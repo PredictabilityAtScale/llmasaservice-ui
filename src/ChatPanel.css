@@ -488,3 +488,13 @@
   background: #007bff;
   color: white;
 }
+
+.invalid {
+  border-color: red;
+}
+
+.error-message {
+  color: red;
+  font-size: 0.8em;
+  margin-top: 5px;
+}

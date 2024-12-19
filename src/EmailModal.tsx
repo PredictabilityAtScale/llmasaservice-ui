@@ -5,11 +5,12 @@ interface EmailModalProps {
   isOpen: boolean;
   onClose: () => void;
   onSend: (to: string, from: string) => void;
+  defaultEmail?: string;
 }
 
-const EmailModal: React.FC<EmailModalProps> = ({ isOpen, onClose, onSend }) => {
+const EmailModal: React.FC<EmailModalProps> = ({ isOpen, onClose, onSend, defaultEmail }) => {
   const [email, setEmail] = useState("");
-  const [emailFrom, setEmailFrom] = useState("");
+  const [emailFrom, setEmailFrom] = useState(defaultEmail || "");
 
   const handleSend = () => {
     onSend(email, emailFrom);
