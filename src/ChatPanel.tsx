@@ -877,8 +877,10 @@ const ChatPanel: React.FC<ChatPanelProps & ExtraProps> = ({
             onChange={(e) => setNextPrompt(e.target.value)}
             onKeyDown={(e) => {
               if (e.key === "Enter") {
-                e.preventDefault();
-                continueChat();
+                if (nextPrompt !== "") {
+                  e.preventDefault();
+                  continueChat();
+                }
               }
             }}
           ></textarea>
@@ -887,7 +889,7 @@ const ChatPanel: React.FC<ChatPanelProps & ExtraProps> = ({
               <svg
                 xmlns="http://www.w3.org/2000/svg"
                 viewBox="0 0 24 24"
-                strokeWidth="2"
+                strokeWidth="1"
                 stroke="currentColor"
                 fill="none"
                 strokeLinecap="round"

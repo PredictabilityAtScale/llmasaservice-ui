@@ -17,8 +17,13 @@
   margin-bottom: 10px;
   text-align: center;
   color: #007bff;
+  
+  /*background-color: #333333; 
+  background: linear-gradient(to right, blue, orange);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent; */  
 }
-
+  
 .side-panel .input-container {
   display: flex;
   flex-direction: row;
@@ -40,16 +45,13 @@
 }
 
 .side-panel .send-button {
-  background-color: #007bff;
-  color: #fff;
+  background-color: lightblue;
+  color: #0056b3;
   border: none;
   border-radius: 50%;
   cursor: pointer;
   height: 40px;
   width: 40px;
-  display: flex;
-  justify-content: center;
-  align-items: center;
   box-shadow: 0 4px 6px rgba(0, 123, 255, 0.3);
   transition: background-color 0.3s ease, transform 0.3s ease;
 }
@@ -57,6 +59,7 @@
 .side-panel .send-button:hover {
   background-color: #0056b3;
   transform: scale(1.1);
+  color: white;
 }
 
 .side-panel .history-entry {
@@ -75,24 +78,30 @@
 
 .side-panel .prompt {
   align-self: flex-start;
-  background-color: #e2e6ea;
   padding: 10px;
-  border-radius: 10px;
-  margin-right: 2%;
+  border-top-left-radius: 15px;
+  border-top-right-radius: 15px;
+  border-bottom-right-radius: 15px;
+  margin-right: 5%;
   margin-bottom: 10px;
-  max-width: 96%;
+  max-width: 90%;
   box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
   white-space: pre-wrap;
+  background-color: #e0f7fa;
+  color: #000;
 }
 
 .side-panel .response {
   align-self: flex-end;
-  background-color: #d1ecf1;
   padding: 10px;
-  border-radius: 10px;
-  margin-left: 1%;
-  max-width: 96%;
+  border-top-left-radius: 15px;
+  border-top-right-radius: 15px;
+  border-bottom-left-radius: 15px;
+  margin-left: 5%;
+  max-width: 90%;
   box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+  background: linear-gradient(to right, #e0f7fa, #ffefd5);
+  color: #000;
 }
 
 .side-panel .copy-button {
@@ -114,15 +123,15 @@
 }
 
 .side-panel .icon-svg-large {
-  width: 24px;
-  height: 24px;
+  margin-right: 4px;
+  margin-top: 5px;
 }
 
 .side-panel .copy-button:hover,
 .side-panel .thumbs-button:hover {
-  color: #0056b3;
+  color: white;
   border-radius: 50%;
-  background-color: #e2e6ea;
+  background-color: #0056b3;
 }
 
 .side-panel .thumbs-button {
@@ -190,14 +199,20 @@
 
 .side-panel .save-button {
   flex: 1;
-  background-color: #d1ecf1;
-  color: black;
+  background-color: lightblue;
+  color: #0056b3;
   border: none;
-  border-radius: 8px;
+  border-radius: 2px;
   cursor: pointer;
   padding: 5px 10px;
   font-size: 0.8em;
   margin-top: 5px;
+  transition: background-color 0.3s ease, transform 0.3s ease;
+}
+
+.side-panel .save-button:hover {
+  background-color: #0056b3;
+  color: white;
 }
 
 .suggestions-container {
@@ -205,9 +220,9 @@
   flex-wrap: wrap;
 }
 
-.suggestion-button {
-  background-color: #007bff;
-  color: white;
+.side-panel .suggestion-button {
+  background-color: lightblue;
+  color: #0056b3;
   border: none;
   border-radius: 5px;
   padding: 5px 10px;
@@ -218,6 +233,7 @@
 
 .suggestion-button:hover {
   background-color: #0056b3;
+  color: white;
 }
 
 .suggestion-button:disabled {
@@ -285,7 +301,6 @@
   border-radius: 10px;
 }
 .side-panel-dark .responseArea {
-  position: relative;
   flex: 1;
   background-color: #424242;
   border-radius: 10px;
@@ -296,20 +311,24 @@
   align-self: flex-start;
   background-color: #303030;
   padding: 10px;
-  border-radius: 10px;
-  margin-right: 2%;
+  border-top-left-radius: 15px;
+  border-top-right-radius: 15px;
+  border-bottom-right-radius: 15px;
+  margin-right: 5%;
   margin-bottom: 10px;
-  max-width: 96%;
+  max-width: 90%;
   box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
   white-space: pre-wrap;
 }
 .side-panel-dark .response {
   align-self: flex-end;
-  background-color: #3a3737;
   padding: 10px;
-  border-radius: 10px;
-  margin-left: 1%;
-  max-width: 96%;
+  border-top-left-radius: 15px;
+  border-top-right-radius: 15px;
+  border-bottom-left-radius: 15px;
+  margin-left: 5%;
+  max-width: 90%;
+  background-color: #3a3737;
   box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
 }
 .side-panel-dark .copy-button {
@@ -329,10 +348,11 @@
   height: 20px;
 }
 .side-panel-dark .icon-svg-large {
-  width: 24px;
-  height: 24px;
+  margin-right: 4px;
+  margin-top: 5px;
 }
-.side-panel-dark .copy-button:hover {
+.side-panel-dark .copy-button:hover,
+.side-panel-dark .thumbs-button:hover {
   color: #0056b3;
   border-radius: 50%;
   background-color: #e2e6ea;
@@ -349,11 +369,6 @@
   justify-content: center;
   align-items: center;
 }
-.side-panel-dark .thumbs-button:hover {
-  color: #0056b3;
-  border-radius: 50%;
-  background-color: #e2e6ea;
-}
 
 .side-panel-dark .button-container {
   display: flex;
@@ -366,7 +381,6 @@
   justify-content: space-between;
   gap: 5px;
 }
-
 
 .side-panel-dark .scroll-button {
   position: absolute;
@@ -419,11 +433,32 @@
   background-color: #3a3737;
   color: white;
   border: none;
-  border-radius: 8px;
+  border-radius: 2px;
   cursor: pointer;
   padding: 5px 10px;
   font-size: 0.8em;
   margin-top: 5px;
+}
+
+.side-panel-dark .save-button:hover {
+  background-color: #0056b3;
+  color: white;
+}
+
+.side-panel-dark .suggestion-button {
+  background-color: #0056b3;
+  color: white;
+  border: none;
+  border-radius: 5px;
+  padding: 5px 10px;
+  font-size: 0.8em;
+  cursor: pointer;
+  margin: 5px;
+}
+
+.side-panel-dark .suggestion-button:hover {
+  background-color: lightblue;
+  color: black;
 }
 
 .powered-by {
