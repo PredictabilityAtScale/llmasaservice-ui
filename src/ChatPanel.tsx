@@ -43,6 +43,7 @@ export interface ChatPanelProps {
     markdown?: string;
     callback?: (match: string, groups: any[]) => void;
     clickCode?: string;
+    style?: string;
   }[];
   showSaveButton?: boolean;
   showEmailButton?: boolean;
@@ -177,7 +178,7 @@ const ChatPanel: React.FC<ChatPanelProps & ExtraProps> = ({
 
             let html = match;
             if (action.type === "button" || action.type === "callback") {
-              html = `<button id="${buttonId}">${
+              html = ` <button id="${buttonId}"  ${action.style ? 'class=" ' + action.style + '"' : ''}>${
                 action.markdown ?? match
               }</button>`;
             } else if (action.type === "markdown" || action.type === "html") {
