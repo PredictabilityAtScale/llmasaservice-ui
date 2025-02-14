@@ -42,8 +42,8 @@ export interface AgentPanelProps {
   }[];
   //showSaveButton?: boolean;
   //showEmailButton?: boolean;
-  //followOnQuestions?: string[];
-  //clearFollowOnQuestionsNextPrompt?: boolean;
+  followOnQuestions?: string[];
+  clearFollowOnQuestionsNextPrompt?: boolean;
   followOnPrompt?: string;
   showPoweredBy?: boolean;
   agent: string;
@@ -85,8 +85,8 @@ const AgentPanel: React.FC<AgentPanelProps & ExtraProps> = ({
   actions = [],
   //showSaveButton = true,
   //showEmailButton = true,
-  //followOnQuestions = [],
-  //clearFollowOnQuestionsNextPrompt = false,
+  followOnQuestions = [],
+  clearFollowOnQuestionsNextPrompt = false,
   //followOnPrompt = "",
   showPoweredBy = true,
   agent,
@@ -100,9 +100,7 @@ const AgentPanel: React.FC<AgentPanelProps & ExtraProps> = ({
   //ragRankLimit = 5,
 }) => {
   const [followOnPrompt, setFollowOnPrompt] = useState<string>("");
-  const [followOnQuestions, setFollowOnQuestions] = useState<string[] | null>(
-    null
-  );
+
   const searchParams = new URLSearchParams(location.search);
   //const id = searchParams.get("id") || "";
   const customer_id = searchParams.get("customer_id") || "";
@@ -125,6 +123,13 @@ const AgentPanel: React.FC<AgentPanelProps & ExtraProps> = ({
         if (data && data.length > 0) {
           //console.log("data", data);
           setAgentData(data[0]);
+
+          if (data && data.cssUrl && data.cssUrl !== "") {
+            const link = document.createElement("link");
+            link.rel = "stylesheet";
+            link.href = data.cssUrl; // "https://dev.llmasaservice.io/themes/simple.css";
+            document.head.appendChild(link);
+          }
         }
       } catch (error) {
         console.error("Error fetching agent data:", error);
@@ -161,7 +166,7 @@ const AgentPanel: React.FC<AgentPanelProps & ExtraProps> = ({
         project_id={agentData?.projectId}
         service={agentData?.groupId || null}
         url={url}
-        title={agentData?.displayTitle ?? "Chat Agent"}
+        title={agentData?.displayTitle ?? ""}
         theme={agentData?.displayTheme === "light" ? "light" : "dark"}
         height={agentData?.displayHeight ?? "75vh"}
         width={agentData?.displayWidth ?? "100%"}
@@ -181,6 +186,7 @@ const AgentPanel: React.FC<AgentPanelProps & ExtraProps> = ({
             ? followOnQuestions
             : agentData?.displayFollowOnPrompts?.split("|") ?? []
         }
+        clearFollowOnQuestionsNextPrompt={clearFollowOnQuestionsNextPrompt}
         historyChangedCallback={(history) => {
           if (history) {
             setFollowOnPrompt("");

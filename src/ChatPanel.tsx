@@ -69,7 +69,7 @@ interface ExtraProps extends React.HTMLAttributes<HTMLElement> {
 const ChatPanel: React.FC<ChatPanelProps & ExtraProps> = ({
   project_id,
   initialPrompt = "",
-  title = "Chat",
+  title = "",
   placeholder = "Type a message",
   hideInitialPrompt = true,
   customer = {} as LLMAsAServiceCustomer,
@@ -111,7 +111,7 @@ const ChatPanel: React.FC<ChatPanelProps & ExtraProps> = ({
     url: url,
     agent: agent,
     ragQueryLimit: ragQueryLimit,
-    ragRankLimit: ragRankLimit
+    ragRankLimit: ragRankLimit,
   });
 
   const [nextPrompt, setNextPrompt] = useState("");
@@ -178,9 +178,9 @@ const ChatPanel: React.FC<ChatPanelProps & ExtraProps> = ({
 
             let html = match;
             if (action.type === "button" || action.type === "callback") {
-              html = ` <button id="${buttonId}"  ${action.style ? 'class=" ' + action.style + '"' : ''}>${
-                action.markdown ?? match
-              }</button>`;
+              html = ` <button id="${buttonId}"  ${
+                action.style ? 'class=" ' + action.style + '"' : ""
+              }>${action.markdown ?? match}</button>`;
             } else if (action.type === "markdown" || action.type === "html") {
               html = action.markdown ?? "";
             }
@@ -708,7 +708,7 @@ const ChatPanel: React.FC<ChatPanelProps & ExtraProps> = ({
         style={{ width: width, height: height }}
         className={"side-panel" + (theme === "light" ? "" : "-dark")}
       >
-        <div className="title">{title}</div>
+        {title && title !== ""  ? <div className="title">{title}</div> : null}
         <div className="responseArea" ref={responseAreaRef}>
           {initialMessage && initialMessage !== "" ? (
             <div className="history-entry">
