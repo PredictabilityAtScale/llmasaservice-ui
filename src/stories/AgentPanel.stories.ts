@@ -17,7 +17,6 @@ type Story = StoryObj<typeof meta>;
 export const AgentPanelStory: Story = {
   args: {
     title: "Test Title",
-    project_id: "[get this from your  control panel]",
     agent: "[your agent id]"
   },
 };

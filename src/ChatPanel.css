@@ -1,29 +1,29 @@
+/* --------------------------------------------------------
+   SIDE PANEL (Light Theme)
+-------------------------------------------------------- */
+
+/* Base container for side panel */
 .side-panel {
   font-family: "Roboto", Arial, Helvetica, sans-serif;
   font-size: small;
-  color: #333;
-  background-color: #f8f9fa;
+  color: #1a1a1a;
+  background-color: #ffffff;
   display: flex;
   flex-direction: column;
-  justify-content: space-between;
-  padding: 10px;
-  box-shadow: 0 0 5px rgba(0, 0, 0, 0.1);
-  max-height: 90%;
 }
 
+/* Title inside side panel */
 .side-panel .title {
-  font-size: 24px;
+  font-size: 1.5rem;
   font-weight: bold;
-  margin-bottom: 10px;
+  padding: 0.5rem 0.75rem;
+  margin-bottom: 0.75rem;
+  border-bottom: 1px solid #e5e7eb;
   text-align: center;
   color: #007bff;
-  
-  /*background-color: #333333; 
-  background: linear-gradient(to right, blue, orange);
-  -webkit-background-clip: text;
-  -webkit-text-fill-color: transparent; */  
 }
-  
+
+/* Input container */
 .side-panel .input-container {
   display: flex;
   flex-direction: row;
@@ -31,6 +31,7 @@
   margin-top: 5px;
 }
 
+/* Textarea styling */
 .side-panel textarea {
   flex: 1;
   padding: 10px;
@@ -44,6 +45,7 @@
   background-color: #fff;
 }
 
+/* Send button */
 .side-panel .send-button {
   background-color: lightblue;
   color: #0056b3;
@@ -62,20 +64,23 @@
   color: white;
 }
 
+/* History entry container */
 .side-panel .history-entry {
-  background-color: #f1f3f5;
+  background-color: white;
   padding-bottom: 10px;
   border-radius: 10px;
 }
 
+/* Response area (scrollable container) */
 .side-panel .responseArea {
   flex: 1;
-  background-color: #f1f3f5;
+  background-color: white;
   border-radius: 10px;
   overflow-y: auto;
   box-shadow: inset 0 2px 4px rgba(0, 0, 0, 0.1);
 }
 
+/* Chat prompt bubble */
 .side-panel .prompt {
   align-self: flex-start;
   padding: 10px;
@@ -91,6 +96,7 @@
   color: #000;
 }
 
+/* Chat response bubble */
 .side-panel .response {
   align-self: flex-end;
   padding: 10px;
@@ -100,10 +106,11 @@
   margin-left: 5%;
   max-width: 90%;
   box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
-  background: linear-gradient(to right, #e0f7fa, #ffefd5);
+  background: #e0f7fa;
   color: #000;
 }
 
+/* Copy button */
 .side-panel .copy-button {
   font-size: 12px;
   border: 0;
@@ -117,23 +124,7 @@
   align-items: center;
 }
 
-.side-panel .icon-svg {
-  width: 20px;
-  height: 20px;
-}
-
-.side-panel .icon-svg-large {
-  margin-right: 4px;
-  margin-top: 5px;
-}
-
-.side-panel .copy-button:hover,
-.side-panel .thumbs-button:hover {
-  color: white;
-  border-radius: 50%;
-  background-color: #0056b3;
-}
-
+/* Thumbs button (same style as copy button) */
 .side-panel .thumbs-button {
   font-size: 12px;
   border: 0;
@@ -147,11 +138,32 @@
   align-items: center;
 }
 
+/* Hover state for copy and thumbs buttons */
+.side-panel .copy-button:hover,
+.side-panel .thumbs-button:hover {
+  color: white;
+  border-radius: 50%;
+  background-color: #0056b3;
+}
+
+/* SVG icons */
+.side-panel .icon-svg {
+  width: 20px;
+  height: 20px;
+}
+
+.side-panel .icon-svg-large {
+  margin-right: 4px;
+  margin-top: 5px;
+}
+
+/* Button container for layout */
 .side-panel .button-container {
   display: flex;
   margin-top: 10px;
 }
 
+/* Button container for actions (with spacing) */
 .side-panel .button-container-actions {
   display: flex;
   margin-top: 10px;
@@ -159,6 +171,7 @@
   gap: 5px;
 }
 
+/* Scroll button (fixed at bottom center) */
 .side-panel .scroll-button {
   position: absolute;
   left: 50%;
@@ -181,22 +194,20 @@
   background-color: #0056b3;
 }
 
+/* Table styling */
 .side-panel table {
   border-collapse: collapse;
   margin-bottom: 1em;
   border: 1px solid #777;
 }
 
-.side-panel th {
-  border: 1px solid #777;
-  padding: 8px;
-}
-
+.side-panel th,
 .side-panel td {
   border: 1px solid #777;
   padding: 8px;
 }
 
+/* Save button */
 .side-panel .save-button {
   flex: 1;
   background-color: lightblue;
@@ -215,11 +226,13 @@
   color: white;
 }
 
+/* Suggestion buttons container */
 .suggestions-container {
   display: flex;
   flex-wrap: wrap;
 }
 
+/* Suggestion button */
 .side-panel .suggestion-button {
   background-color: lightblue;
   color: #0056b3;
@@ -242,6 +255,11 @@
   cursor: not-allowed;
 }
 
+/* --------------------------------------------------------
+   SIDE PANEL (Dark Theme)
+-------------------------------------------------------- */
+
+/* Base container for dark side panel */
 .side-panel-dark {
   font-family: "Roboto", Arial, Helvetica, sans-serif;
   font-size: small;
@@ -254,18 +272,24 @@
   box-shadow: 5px 0 5px rgba(0, 0, 0, 0.1);
   max-height: 90%;
 }
+
+/* Title */
 .side-panel-dark .title {
   font-size: 24px;
   font-weight: bold;
   margin-bottom: 10px;
   text-align: center;
 }
+
+/* Input container */
 .side-panel-dark .input-container {
   display: flex;
   flex-direction: row;
   align-items: center;
   margin-top: 5px;
 }
+
+/* Textarea */
 .side-panel-dark textarea {
   flex: 1;
   padding: 10px;
@@ -277,6 +301,8 @@
   color: #333;
   border: 1px solid #ddd;
 }
+
+/* Send button */
 .side-panel-dark .send-button {
   background-color: #424242;
   color: white;
@@ -291,15 +317,20 @@
   box-shadow: 0 4px 6px rgba(0, 123, 255, 0.3);
   transition: background-color 0.3s ease, transform 0.3s ease;
 }
+
 .side-panel-dark .send-button:hover {
   background-color: #0056b3;
   transform: scale(1.1);
 }
+
+/* History entry */
 .side-panel-dark .history-entry {
   background-color: #424242;
   padding-bottom: 10px;
   border-radius: 10px;
 }
+
+/* Response area */
 .side-panel-dark .responseArea {
   flex: 1;
   background-color: #424242;
@@ -307,6 +338,8 @@
   overflow-y: auto;
   box-shadow: inset 0 2px 4px rgba(0, 0, 0, 0.1);
 }
+
+/* Chat prompt bubble */
 .side-panel-dark .prompt {
   align-self: flex-start;
   background-color: #303030;
@@ -320,6 +353,8 @@
   box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
   white-space: pre-wrap;
 }
+
+/* Chat response bubble */
 .side-panel-dark .response {
   align-self: flex-end;
   padding: 10px;
@@ -331,6 +366,8 @@
   background-color: #3a3737;
   box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
 }
+
+/* Copy button */
 .side-panel-dark .copy-button {
   font-size: 12px;
   border: 0;
@@ -343,20 +380,27 @@
   justify-content: center;
   align-items: center;
 }
+
+/* SVG icons */
 .side-panel-dark .icon-svg {
   width: 20px;
   height: 20px;
 }
+
 .side-panel-dark .icon-svg-large {
   margin-right: 4px;
   margin-top: 5px;
 }
+
+/* Hover state for copy and thumbs buttons */
 .side-panel-dark .copy-button:hover,
 .side-panel-dark .thumbs-button:hover {
   color: #0056b3;
   border-radius: 50%;
   background-color: #e2e6ea;
 }
+
+/* Thumbs button */
 .side-panel-dark .thumbs-button {
   font-size: 12px;
   border: 0;
@@ -370,6 +414,7 @@
   align-items: center;
 }
 
+/* Button containers */
 .side-panel-dark .button-container {
   display: flex;
   margin-top: 10px;
@@ -382,6 +427,7 @@
   gap: 5px;
 }
 
+/* Scroll button */
 .side-panel-dark .scroll-button {
   position: absolute;
   left: 50%;
@@ -404,22 +450,20 @@
   background-color: #0056b3;
 }
 
+/* Table styling */
 .side-panel-dark table {
   border-collapse: collapse;
   margin-bottom: 1em;
   border: 1px solid #ddd;
 }
 
-.side-panel-dark th {
-  border: 1px solid #ddd;
-  padding: 8px;
-}
-
+.side-panel-dark th,
 .side-panel-dark td {
   border: 1px solid #ddd;
   padding: 8px;
 }
 
+/* Links */
 .side-panel-dark a {
   color: #ddd;
 }
@@ -428,6 +472,7 @@
   color: #fff;
 }
 
+/* Save button */
 .side-panel-dark .save-button {
   flex: 1;
   background-color: #3a3737;
@@ -445,6 +490,7 @@
   color: white;
 }
 
+/* Suggestion button */
 .side-panel-dark .suggestion-button {
   background-color: #0056b3;
   color: white;
@@ -461,22 +507,31 @@
   color: black;
 }
 
+/* --------------------------------------------------------
+   POWERED BY / FOOTER
+-------------------------------------------------------- */
+
 .powered-by {
   margin-top: 3px;
   display: flex;
   justify-content: center;
   align-items: center;
   color: lightgrey;
-  font-size: 0.8em; /* Adjust the font size as needed */
-  height: 100%; /* Ensure the container takes the full height of its parent */
-  text-align: center; /* Center text horizontally */
+  font-size: 0.8em;
+  height: 100%;
+  text-align: center;
 }
 
 .powered-by a {
   color: lightgrey;
-  text-decoration: underline; /* Underline the link */
+  text-decoration: underline;
 }
 
+/* --------------------------------------------------------
+   MODAL DIALOG
+-------------------------------------------------------- */
+
+/* Modal overlay (full screen dim background) */
 .modal-overlay {
   position: fixed;
   top: 0;
@@ -489,6 +544,7 @@
   align-items: center;
 }
 
+/* Modal content container */
 .modal-content {
   background: white;
   padding: 5px;
@@ -498,16 +554,19 @@
   color: #333;
 }
 
+/* Modal text */
 .modal-text {
   color: black;
 }
 
+/* Modal buttons container */
 .modal-buttons {
   padding: 5px 10px;
   display: flex;
   justify-content: space-between;
 }
 
+/* Modal button styling */
 .modal-buttons button {
   padding: 5px 10px;
   border: none;
@@ -515,19 +574,27 @@
   cursor: pointer;
 }
 
+/* First modal button */
 .modal-buttons button:first-child {
   background: #ccc;
 }
 
+/* Second modal button */
 .modal-buttons button:last-child {
   background: #007bff;
   color: white;
 }
 
+/* --------------------------------------------------------
+   FORM ERROR STYLING
+-------------------------------------------------------- */
+
+/* Invalid field outline */
 .invalid {
   border-color: red;
 }
 
+/* Error message text */
 .error-message {
   color: red;
   font-size: 0.8em;

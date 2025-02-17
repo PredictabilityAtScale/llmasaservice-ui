@@ -1,15 +1,12 @@
 import React, { useEffect, useState } from "react";
-
-import {
-  materialDark,
-  materialLight,
-} from "react-syntax-highlighter/dist/esm/styles/prism";
+import materialDark from "react-syntax-highlighter/dist/esm/styles/prism/material-dark.js";
+import materialLight from "react-syntax-highlighter/dist/esm/styles/prism/material-light.js";
 import ChatPanel from "./ChatPanel";
 import { LLMAsAServiceCustomer } from "llmasaservice-client";
 import PrismStyle from "react-syntax-highlighter";
 
 export interface AgentPanelProps {
-  project_id: string;
+  //project_id: string;
   //initialPrompt?: string;
   //initialMessage?: string;
   //title?: string;
@@ -20,10 +17,10 @@ export interface AgentPanelProps {
   data?: { key: string; data: string }[];
   thumbsUpClick?: (callId: string) => void;
   thumbsDownClick?: (callId: string) => void;
-  //theme?: "light" | "dark";
+  theme?: "light" | "dark";
   //markdownClass?: string;
-  //width?: string;
-  //height?: string;
+  width?: string;
+  height?: string;
   url?: string;
   //scrollToEnd?: boolean;
   prismStyle?: PrismStyle;
@@ -61,7 +58,7 @@ interface ExtraProps extends React.HTMLAttributes<HTMLElement> {
 }
 
 const AgentPanel: React.FC<AgentPanelProps & ExtraProps> = ({
-  project_id,
+  //project_id,
   //initialPrompt = "",
   //title = "Chat",
   //placeholder = "Type a message",
@@ -71,16 +68,16 @@ const AgentPanel: React.FC<AgentPanelProps & ExtraProps> = ({
   data = [],
   thumbsUpClick,
   thumbsDownClick,
-  //theme = "light",
+  theme,
   //markdownClass = null,
-  //width = "300px",
-  //height = "100vh",
+  width,
+  height,
   url = "https://chat.llmasaservice.io/",
   //scrollToEnd = false,
   //initialMessage = "",
   //prismStyle = theme === "light" ? materialLight : materialDark,
   service = null,
-  historyChangedCallback = null,
+  historyChangedCallback = undefined,
   //promptTemplate = "",
   actions = [],
   //showSaveButton = true,
@@ -119,17 +116,10 @@ const AgentPanel: React.FC<AgentPanelProps & ExtraProps> = ({
             },
           }
         );
+
         const data = await response.json();
         if (data && data.length > 0) {
-          //console.log("data", data);
           setAgentData(data[0]);
-
-          if (data && data.cssUrl && data.cssUrl !== "") {
-            const link = document.createElement("link");
-            link.rel = "stylesheet";
-            link.href = data.cssUrl; // "https://dev.llmasaservice.io/themes/simple.css";
-            document.head.appendChild(link);
-          }
         }
       } catch (error) {
         console.error("Error fetching agent data:", error);
@@ -162,73 +152,76 @@ const AgentPanel: React.FC<AgentPanelProps & ExtraProps> = ({
 
   return (
     <>
-      <ChatPanel
-        project_id={agentData?.projectId}
-        service={agentData?.groupId || null}
-        url={url}
-        title={agentData?.displayTitle ?? ""}
-        theme={agentData?.displayTheme === "light" ? "light" : "dark"}
-        height={agentData?.displayHeight ?? "75vh"}
-        width={agentData?.displayWidth ?? "100%"}
-        promptTemplate={agentData?.displayPromptTemplate ?? "{{prompt}}"}
-        initialMessage={
-          agentData?.displayStartMessageOrPrompt === "message"
-            ? agentData?.displayInitialMessageOrPrompt ?? ""
-            : undefined
-        }
-        initialPrompt={
-          agentData?.displayStartMessageOrPrompt === "prompt"
-            ? agentData?.displayInitialMessageOrPrompt ?? ""
-            : undefined
-        }
-        followOnQuestions={
-          followOnQuestions
-            ? followOnQuestions
-            : agentData?.displayFollowOnPrompts?.split("|") ?? []
-        }
-        clearFollowOnQuestionsNextPrompt={clearFollowOnQuestionsNextPrompt}
-        historyChangedCallback={(history) => {
-          if (history) {
-            setFollowOnPrompt("");
+      {agentData && (
+        <ChatPanel
+          project_id={agentData?.projectId}
+          service={agentData?.groupId || null}
+          url={url}
+          title={agentData?.displayTitle ?? ""}
+          theme={theme ? theme : agentData?.displayTheme === "light" ? "light" : "dark"}
+          cssUrl={agentData?.cssUrl ?? ""}
+          height={height ? height : agentData?.displayHeight ?? "100vh"}
+          width={width ? width : agentData?.displayWidth ?? "100%"}
+          promptTemplate={agentData?.displayPromptTemplate ?? "{{prompt}}"}
+          initialMessage={
+            agentData?.displayStartMessageOrPrompt === "message"
+              ? agentData?.displayInitialMessageOrPrompt ?? ""
+              : undefined
           }
-        }}
-        prismStyle={
-          (agentData?.displayTheme === "light"
-            ? materialLight
-            : materialDark) as any
-        }
-        actions={[
-          ...actions,
-          ...getActionsArraySafely(agentData?.displayActions),
-        ]}
-        followOnPrompt={followOnPrompt}
-        agent={agent}
-        placeholder={agentData?.displayPlaceholder ?? "Type a message"}
-        hideInitialPrompt={agentData?.displayHideInitialPrompt ?? true}
-        data={[...data, { key: "data", data: agentData?.data }]}
-        showEmailButton={agentData?.displayShowEmailButton ?? true}
-        showSaveButton={agentData?.displayShowSaveButton ?? true}
-        showCallToAction={agentData?.displayShowCallToAction ?? false}
-        callToActionButtonText={
-          agentData?.displayCallToActionButtonText ?? "Submit"
-        }
-        callToActionEmailAddress={
-          agentData?.displayCallToActionEmailAddress ?? ""
-        }
-        callToActionEmailSubject={
-          agentData?.displayCallToActionEmailSubject ?? "Agent CTA Submitted"
-        }
-        callToActionMustSendEmail={
-          agentData?.displayCallToActionMustSendEmail ?? false
-        }
-        customer={{
-          customer_id: customer_id ?? "default",
-          customer_user_email: customer_email ?? "",
-        }}
-        scrollToEnd={agentData?.displayScrollToEnd ?? false}
-        ragQueryLimit={agentData?.ragQueryLimit ?? 10}
-        ragRankLimit={agentData?.ragRankLimit ?? 5}
-      />
+          initialPrompt={
+            agentData?.displayStartMessageOrPrompt === "prompt"
+              ? agentData?.displayInitialMessageOrPrompt ?? ""
+              : undefined
+          }
+          followOnQuestions={
+            followOnQuestions
+              ? followOnQuestions
+              : agentData?.displayFollowOnPrompts?.split("|") ?? []
+          }
+          clearFollowOnQuestionsNextPrompt={clearFollowOnQuestionsNextPrompt}
+          historyChangedCallback={historyChangedCallback}
+          prismStyle={
+            (agentData?.displayTheme === "light"
+              ? materialLight
+              : materialDark) as any
+          }
+          actions={[
+            ...actions,
+            ...getActionsArraySafely(agentData?.displayActions),
+          ]}
+          followOnPrompt={followOnPrompt}
+          agent={agent}
+          placeholder={agentData?.displayPlaceholder ?? "Type a message"}
+          hideInitialPrompt={agentData?.displayHideInitialPrompt ?? true}
+          data={[...data, { key: "data", data: agentData?.data }]}
+          showEmailButton={agentData?.displayShowEmailButton ?? true}
+          showSaveButton={agentData?.displayShowSaveButton ?? true}
+          showCallToAction={agentData?.displayShowCallToAction ?? false}
+          callToActionButtonText={
+            agentData?.displayCallToActionButtonText ?? "Submit"
+          }
+          callToActionEmailAddress={
+            agentData?.displayCallToActionEmailAddress ?? ""
+          }
+          callToActionEmailSubject={
+            agentData?.displayCallToActionEmailSubject ?? "Agent CTA Submitted"
+          }
+          callToActionMustSendEmail={
+            agentData?.displayCallToActionMustSendEmail ?? false
+          }
+          customer={{
+            customer_id: customer ? customer.customer_id : customer_id ?? "",
+            customer_user_email: customer
+              ? customer.customer_user_email
+              : customer_email ?? "",
+          }}
+          scrollToEnd={agentData?.displayScrollToEnd ?? false}
+          ragQueryLimit={agentData?.ragQueryLimit ?? 10}
+          ragRankLimit={agentData?.ragRankLimit ?? 5}
+          showPoweredBy={showPoweredBy}
+          messages={messages}
+        />
+      )}
     </>
   );
 };

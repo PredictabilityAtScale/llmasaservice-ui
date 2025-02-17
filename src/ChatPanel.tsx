@@ -8,8 +8,8 @@ import "./ChatPanel.css";
 import remarkGfm from "remark-gfm";
 import { Prism as SyntaxHighlighter } from "react-syntax-highlighter";
 import PrismStyle from "react-syntax-highlighter";
-import materialDark from "react-syntax-highlighter/dist/cjs/styles/prism/material-dark.js";
-import materialLight from "react-syntax-highlighter/dist/cjs/styles/prism/material-light.js";
+import materialDark from "react-syntax-highlighter/dist/esm/styles/prism/material-dark.js";
+import materialLight from "react-syntax-highlighter/dist/esm/styles/prism/material-light.js";
 import EmailModal from "./EmailModal";
 import CallToActionlModal from "./CallToActionModal";
 
@@ -26,6 +26,7 @@ export interface ChatPanelProps {
   thumbsUpClick?: (callId: string) => void;
   thumbsDownClick?: (callId: string) => void;
   theme?: "light" | "dark";
+  cssUrl?: string;
   markdownClass?: string;
   width?: string;
   height?: string;
@@ -78,6 +79,7 @@ const ChatPanel: React.FC<ChatPanelProps & ExtraProps> = ({
   thumbsUpClick,
   thumbsDownClick,
   theme = "light",
+  cssUrl = "",
   markdownClass = null,
   width = "300px",
   height = "100vh",
@@ -158,6 +160,16 @@ const ChatPanel: React.FC<ChatPanelProps & ExtraProps> = ({
       window.removeEventListener("beforeunload", handleBeforeUnload);
     };
   }, []);
+
+  useEffect(() => {
+    if (cssUrl && cssUrl !== "") {
+      const link = document.createElement("link");
+      link.href = cssUrl;
+      link.rel = "stylesheet";
+      document.head.appendChild(link);
+      console.log("Added css link", link);
+    }
+  }, [cssUrl]);
 
   // response change. Update the history
   useEffect(() => {
