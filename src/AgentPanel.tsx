@@ -28,6 +28,7 @@ export interface AgentPanelProps {
   historyChangedCallback?: (history: {
     [key: string]: { content: string; callId: string };
   }) => void;
+  responseCompleteCallback?: (callId: string, prompt: string, response: string) => void;
   //promptTemplate?: string;
   actions?: {
     pattern: string;
@@ -78,6 +79,7 @@ const AgentPanel: React.FC<AgentPanelProps & ExtraProps> = ({
   //prismStyle = theme === "light" ? materialLight : materialDark,
   service = null,
   historyChangedCallback = undefined,
+  responseCompleteCallback = undefined,
   //promptTemplate = "",
   actions = [],
   //showSaveButton = true,
@@ -180,6 +182,7 @@ const AgentPanel: React.FC<AgentPanelProps & ExtraProps> = ({
           }
           clearFollowOnQuestionsNextPrompt={clearFollowOnQuestionsNextPrompt}
           historyChangedCallback={historyChangedCallback}
+          responseCompleteCallback={responseCompleteCallback}
           prismStyle={
             (agentData?.displayTheme === "light"
               ? materialLight

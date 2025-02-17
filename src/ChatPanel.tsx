@@ -37,6 +37,7 @@ export interface ChatPanelProps {
   historyChangedCallback?: (history: {
     [key: string]: { content: string; callId: string };
   }) => void;
+  responseCompleteCallback?: (callId: string, prompt: string, response: string) => void;
   promptTemplate?: string;
   actions?: {
     pattern: string;
@@ -89,6 +90,7 @@ const ChatPanel: React.FC<ChatPanelProps & ExtraProps> = ({
   prismStyle = theme === "light" ? materialLight : materialDark,
   service = null,
   historyChangedCallback = null,
+  responseCompleteCallback = null,
   promptTemplate = "",
   actions = [],
   showSaveButton = true,
@@ -138,6 +140,13 @@ const ChatPanel: React.FC<ChatPanelProps & ExtraProps> = ({
   };
 
   const responseAreaRef = useRef(null);
+
+  useEffect(() => {
+    if (responseCompleteCallback) {
+      if (lastCallId && lastCallId !== "" && idle)
+        responseCompleteCallback(lastCallId, lastPrompt ?? "", response);
+    }
+  }, [idle]);
 
   useEffect(() => {
     const handleBeforeUnload = (event: BeforeUnloadEvent) => {
