@@ -174,7 +174,7 @@ const AgentPanel: React.FC<AgentPanelProps & ExtraProps> = ({
               : undefined
           }
           followOnQuestions={
-            followOnQuestions
+            followOnQuestions && followOnQuestions.length > 0
               ? followOnQuestions
               : agentData?.displayFollowOnPrompts?.split("|") ?? []
           }
