@@ -28,7 +28,11 @@ export interface AgentPanelProps {
   historyChangedCallback?: (history: {
     [key: string]: { content: string; callId: string };
   }) => void;
-  responseCompleteCallback?: (callId: string, prompt: string, response: string) => void;
+  responseCompleteCallback?: (
+    callId: string,
+    prompt: string,
+    response: string
+  ) => void;
   //promptTemplate?: string;
   actions?: {
     pattern: string;
@@ -53,6 +57,8 @@ export interface AgentPanelProps {
   //callToActionMustSendEmail?: boolean;
   //ragQueryLimit?: number;
   //ragRankLimit?: number;
+  initialHistory?: { [key: string]: { content: string; callId: string } };
+  hideRagContextInPrompt?: boolean;
 }
 interface ExtraProps extends React.HTMLAttributes<HTMLElement> {
   inline?: boolean;
@@ -97,6 +103,8 @@ const AgentPanel: React.FC<AgentPanelProps & ExtraProps> = ({
   //callToActionMustSendEmail = false,
   //ragQueryLimit = 10,
   //ragRankLimit = 5,
+  initialHistory = {},
+  hideRagContextInPrompt = true,
 }) => {
   const [followOnPrompt, setFollowOnPrompt] = useState<string>("");
 
@@ -110,7 +118,9 @@ const AgentPanel: React.FC<AgentPanelProps & ExtraProps> = ({
     const fetchAgentData = async () => {
       try {
         const response = await fetch(
-          `https://api.llmasaservice.io/agents/${agent}`,
+          url.endsWith("dev")
+            ? `https://8ftw8droff.execute-api.us-east-1.amazonaws.com/dev/agents/${agent}`
+            : `https://api.llmasaservice.io/agents/${agent}`,
           {
             method: "GET",
             headers: {
@@ -160,7 +170,13 @@ const AgentPanel: React.FC<AgentPanelProps & ExtraProps> = ({
           service={agentData?.groupId || null}
           url={url}
           title={agentData?.displayTitle ?? ""}
-          theme={theme ? theme : agentData?.displayTheme === "light" ? "light" : "dark"}
+          theme={
+            theme
+              ? theme
+              : agentData?.displayTheme === "light"
+              ? "light"
+              : "dark"
+          }
           cssUrl={agentData?.cssUrl ?? ""}
           height={height ? height : agentData?.displayHeight ?? "100vh"}
           width={width ? width : agentData?.displayWidth ?? "100%"}
@@ -223,6 +239,9 @@ const AgentPanel: React.FC<AgentPanelProps & ExtraProps> = ({
           ragRankLimit={agentData?.ragRankLimit ?? 5}
           showPoweredBy={showPoweredBy}
           messages={messages}
+          conversation={conversation}
+          initialHistory={initialHistory}
+          hideRagContextInPrompt={hideRagContextInPrompt}
         />
       )}
     </>

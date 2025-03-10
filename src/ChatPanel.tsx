@@ -37,7 +37,11 @@ export interface ChatPanelProps {
   historyChangedCallback?: (history: {
     [key: string]: { content: string; callId: string };
   }) => void;
-  responseCompleteCallback?: (callId: string, prompt: string, response: string) => void;
+  responseCompleteCallback?: (
+    callId: string,
+    prompt: string,
+    response: string
+  ) => void;
   promptTemplate?: string;
   actions?: {
     pattern: string;
@@ -62,6 +66,10 @@ export interface ChatPanelProps {
   callToActionMustSendEmail?: boolean;
   ragQueryLimit?: number;
   ragRankLimit?: number;
+  initialHistory?: {
+    [prompt: string]: { content: string; callId: string };
+  };
+  hideRagContextInPrompt?: boolean;
 }
 
 interface ExtraProps extends React.HTMLAttributes<HTMLElement> {
@@ -108,6 +116,8 @@ const ChatPanel: React.FC<ChatPanelProps & ExtraProps> = ({
   callToActionMustSendEmail = false,
   ragQueryLimit = 10,
   ragRankLimit = 5,
+  initialHistory = {},
+  hideRagContextInPrompt = true,
 }) => {
   const { send, response, idle, stop, lastCallId } = useLLM({
     project_id: project_id,
@@ -122,7 +132,7 @@ const ChatPanel: React.FC<ChatPanelProps & ExtraProps> = ({
   const [lastController, setLastController] = useState(new AbortController());
   const [history, setHistory] = useState<{
     [prompt: string]: { content: string; callId: string };
-  }>({});
+  }>(initialHistory);
   const [isLoading, setIsLoading] = useState(false);
   const [lastPrompt, setLastPrompt] = useState<string | null>(null);
   const [lastKey, setLastKey] = useState<string | null>(null);
@@ -147,6 +157,10 @@ const ChatPanel: React.FC<ChatPanelProps & ExtraProps> = ({
         responseCompleteCallback(lastCallId, lastPrompt ?? "", response);
     }
   }, [idle]);
+
+  useEffect(() => {
+      setHistory(initialHistory);
+  }, [initialHistory]);
 
   useEffect(() => {
     const handleBeforeUnload = (event: BeforeUnloadEvent) => {
@@ -599,7 +613,7 @@ const ChatPanel: React.FC<ChatPanelProps & ExtraProps> = ({
         html += `
       <div class="history-entry">
         <div class="prompt-container">
-          <div class="prompt">${convertMarkdownToHTML(prompt)}</div>
+          <div class="prompt">${convertMarkdownToHTML(formatPromptForDisplay(prompt))}</div>
         </div>
         <div class="response-container">
           <div class="response">${convertMarkdownToHTML(response.content)}</div>
@@ -723,13 +737,34 @@ const ChatPanel: React.FC<ChatPanelProps & ExtraProps> = ({
     });
   };
 
+  const formatPromptForDisplay = (prompt: string): string => {
+    if (!prompt) {
+      return "";
+    }
+    
+    if (hideRagContextInPrompt && prompt.includes("CONTEXT:")) {
+      const parts = prompt.split("CONTEXT:");
+      const withoutContext = parts.length > 0 ? parts[0] as string : "";
+      
+      // Remove the optional chaining since withoutContext is always a string
+      if (withoutContext.includes("PROMPT:")) {
+        const promptParts = withoutContext.split("PROMPT:");
+        return promptParts.length > 1 ? promptParts[1] ?? "".trim() : withoutContext.trim();
+      }
+      
+      return withoutContext.trim();
+    }
+    
+    return prompt;
+  }
+
   return (
     <>
       <div
         style={{ width: width, height: height }}
         className={"side-panel" + (theme === "light" ? "" : "-dark")}
       >
-        {title && title !== ""  ? <div className="title">{title}</div> : null}
+        {title && title !== "" ? <div className="title">{title}</div> : null}
         <div className="responseArea" ref={responseAreaRef}>
           {initialMessage && initialMessage !== "" ? (
             <div className="history-entry">
@@ -748,7 +783,7 @@ const ChatPanel: React.FC<ChatPanelProps & ExtraProps> = ({
           {Object.entries(history).map(([prompt, response], index) => (
             <div className="history-entry" key={index}>
               {hideInitialPrompt && index === 0 ? null : (
-                <div className="prompt">{prompt}</div>
+                <div className="prompt">{formatPromptForDisplay(prompt)}</div>
               )}
 
               <div className="response">
