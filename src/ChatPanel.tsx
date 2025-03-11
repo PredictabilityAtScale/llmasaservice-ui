@@ -165,6 +165,11 @@ const ChatPanel: React.FC<ChatPanelProps & ExtraProps> = ({
   }, [initialHistory]);
 
   useEffect(() => {
+    if (!conversation || conversation === "") return;
+    setHistory(initialHistory);
+  }, [conversation]);
+
+  useEffect(() => {
     const handleBeforeUnload = (event: BeforeUnloadEvent) => {
       if (
         callToActionMustSendEmail &&
