@@ -159,7 +159,9 @@ const ChatPanel: React.FC<ChatPanelProps & ExtraProps> = ({
   }, [idle]);
 
   useEffect(() => {
-      setHistory(initialHistory);
+    if (Object.keys(initialHistory).length === 0) return;
+    setHistory(initialHistory);
+
   }, [initialHistory]);
 
   useEffect(() => {
@@ -749,7 +751,7 @@ const ChatPanel: React.FC<ChatPanelProps & ExtraProps> = ({
       // Remove the optional chaining since withoutContext is always a string
       if (withoutContext.includes("PROMPT:")) {
         const promptParts = withoutContext.split("PROMPT:");
-        return promptParts.length > 1 ? promptParts[1] ?? "".trim() : withoutContext.trim();
+        return promptParts.length > 1 ? (promptParts[1] || "").trim() : withoutContext.trim();
       }
       
       return withoutContext.trim();
