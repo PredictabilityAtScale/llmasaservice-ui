@@ -192,13 +192,42 @@ const ChatPanel: React.FC<ChatPanelProps & ExtraProps> = ({
   }, []);
 
   useEffect(() => {
-    if (cssUrl && cssUrl !== "") {
-      const link = document.createElement("link");
-      link.href = cssUrl;
-      link.rel = "stylesheet";
-      document.head.appendChild(link);
-      console.log("Added css link", link);
+    // Clean up any previously added CSS from this component
+    const existingLinks = document.querySelectorAll('link[data-source="llmasaservice-ui"]');
+    existingLinks.forEach(link => link.parentNode?.removeChild(link));
+    
+    const existingStyles = document.querySelectorAll('style[data-source="llmasaservice-ui"]');
+    existingStyles.forEach(style => style.parentNode?.removeChild(style));
+    
+    if (cssUrl) {
+      if (cssUrl.startsWith('http://') || cssUrl.startsWith('https://')) {
+        // If it's a URL, create a link element
+        const link = document.createElement("link");
+        link.href = cssUrl;
+        link.rel = "stylesheet";
+        // Add a data attribute to identify and remove this link later if needed
+        link.setAttribute('data-source', 'llmasaservice-ui');
+        document.head.appendChild(link);
+        console.log("Added CSS link", link);
+      } else {
+        // If it's a CSS string, create a style element
+        const style = document.createElement("style");
+        style.textContent = cssUrl;
+        // Add a data attribute to identify and remove this style later if needed
+        style.setAttribute('data-source', 'llmasaservice-ui');
+        document.head.appendChild(style);
+        console.log("Added inline CSS");
+      }
     }
+    
+    // Clean up when component unmounts
+    return () => {
+      const links = document.querySelectorAll('link[data-source="llmasaservice-ui"]');
+      links.forEach(link => link.parentNode?.removeChild(link));
+      
+      const styles = document.querySelectorAll('style[data-source="llmasaservice-ui"]');
+      styles.forEach(style => style.parentNode?.removeChild(style));
+    };
   }, [cssUrl]);
 
   // response change. Update the history
@@ -769,7 +798,7 @@ const ChatPanel: React.FC<ChatPanelProps & ExtraProps> = ({
     <>
       <div
         style={{ width: width, height: height }}
-        className={"side-panel" + (theme === "light" ? "" : "-dark")}
+        className={"llm-panel" + (theme === "light" ? "" : " dark-theme")}
       >
         {title && title !== "" ? <div className="title">{title}</div> : null}
         <div className="responseArea" ref={responseAreaRef}>
@@ -942,6 +971,7 @@ const ChatPanel: React.FC<ChatPanelProps & ExtraProps> = ({
 
         <div className="input-container">
           <textarea
+            className="chat-input"
             placeholder={placeholder}
             value={nextPrompt}
             onChange={(e) => setNextPrompt(e.target.value)}

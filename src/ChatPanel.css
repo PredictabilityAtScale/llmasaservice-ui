@@ -1,188 +1,265 @@
 /* --------------------------------------------------------
-   SIDE PANEL (Light Theme)
+   LLM PANEL CSS
+   Version: 1.1.0 (Improved)
 -------------------------------------------------------- */
 
-/* Base container for side panel */
-.side-panel {
-  font-family: "Roboto", Arial, Helvetica, sans-serif;
-  font-size: small;
-  color: #1a1a1a;
-  background-color: #ffffff;
+/* Root Variables */
+:root {
+  /* Spacing Variables */
+  --spacing-small: 0.3rem;
+  --spacing-medium: 0.5rem;
+  --spacing-large: 1rem;
+
+  --border-radius: 10px;
+  --icon-size-large: 1rem;
+  --icon-button-size-large: 2.5rem;
+  --icon-size-small: 1.5rem;
+  --icon-button-size-small: 1.7rem;
+  --button-send-size: 3rem;
+  --input-height: 3rem;
+
+  /* Light Theme Colors */
+  --background-color: #fff;
+
+  --title-text-color: #555;
+  --title-background-color: #fff;
+  --title-divider-color: #eee;
+
+  --input-background-color: #eee;
+  --input-border-color: #ddd;
+  --input-text-color: #555;
+
+  --button-background-color: #eee;
+  --button-border-color: #ddd;
+  --button-text-color: #555;
+  --button-background-color-hover: #777;
+  --button-text-color-hover: #fff;
+  --button-drop-shadow: 2px 2px 4px rgba(0, 0, 0, 0.15);
+
+  --button-action-background-color: transparent;
+  --button-action-text-color: #999;
+
+  --prompt-background-color: #eeeeee;
+  --prompt-text-color: #000;
+
+  --response-background-color: #ffffff;
+  --response-text-color: #000;
+
+  --button-scroll-background-color: #777;
+  --button-scroll-text-color: #fff;
+  --button-scroll-background-color-hover: #999;
+
+  --table-border-color: #777;
+
+  --powered-by-text-color: #999;
+}
+
+/* Dark Theme Overrides */
+.dark-theme {
+  --background-color: #1a1a1a;
+
+  --title-text-color: #e0e0e0;
+  --title-background-color: #1a1a1a;
+  --title-divider-color: #333;
+
+  --input-background-color: #2c2c2c;
+  --input-border-color: #444;
+  --input-text-color: #e0e0e0;
+
+  --button-background-color: #3a3a3a;
+  --button-border-color: #555;
+  --button-text-color: #e0e0e0;
+  --button-background-color-hover: #505050;
+  --button-text-color-hover: #fff;
+  --button-drop-shadow: 2px 2px 4px rgba(0, 0, 0, 0.5);
+
+  --button-action-background-color: transparent;
+  --button-action-text-color: #bbb;
+
+  --prompt-background-color: #333333;
+  --prompt-text-color: #ffffff;
+
+  --response-background-color: #1a1a1a;
+  --response-text-color: #e0e0e0;
+
+  --button-scroll-background-color: #505050;
+  --button-scroll-text-color: #fff;
+  --button-scroll-background-color-hover: #606060;
+
+  --table-border-color: #444;
+}
+
+/* --------------------------------------------------------
+   LLM PANEL Styles
+-------------------------------------------------------- */
+.llm-panel {
+  font-family: "Inter", system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  font-size: 0.875rem;
+  background-color: var(--background-color);
   display: flex;
   flex-direction: column;
+  position: relative;
+  padding: var(--spacing-medium);
 }
 
-/* Title inside side panel */
-.side-panel .title {
-  font-size: 1.5rem;
-  font-weight: bold;
-  padding: 0.5rem 0.75rem;
-  margin-bottom: 0.75rem;
-  border-bottom: 1px solid #e5e7eb;
+/* Title Panel */
+.llm-panel .title {
+  font-size: 1rem;
+  padding: var(--spacing-medium);
+  border-bottom: 0.5px solid var(--title-divider-color);
   text-align: center;
-  color: #007bff;
+  color: var(--title-text-color);
+  background-color: var(--title-background-color);
 }
 
-/* Input container */
-.side-panel .input-container {
+/* Input Container */
+.llm-panel .input-container {
   display: flex;
   flex-direction: row;
   align-items: center;
-  margin-top: 5px;
+  margin-top: var(--spacing-small);
 }
 
-/* Textarea styling */
-.side-panel textarea {
+/* Textarea Styling */
+.llm-panel .chat-input {
   flex: 1;
-  padding: 10px;
-  margin-right: 10px;
-  border-radius: 8px;
-  height: 50px;
-  min-height: 50px;
+  color: var(--input-text-color);
+  margin: 0 var(--spacing-small);
+  border-radius: var(--border-radius);
+  height:  var(--input-height);
+  min-height: var(--input-height);
   resize: vertical;
-  border: 1px solid #ddd;
-  color: #333;
-  background-color: #fff;
+  background-color: var(--input-background-color);
+  border: 1px solid var(--input-border-color);
 }
 
-/* Send button */
-.side-panel .send-button {
-  background-color: lightblue;
-  color: #0056b3;
-  border: none;
-  border-radius: 50%;
+/* Accessible Focus State */
+.llm-panel .chat-input:focus,
+.llm-panel input:focus {
+  outline: none;
+  border: 2px solid var(--button-background-color-hover);
+  box-shadow: 0 0 5px var(--button-background-color-hover);
+}
+
+/* Send Button */
+.llm-panel .send-button {
+  margin-right: var(--spacing-small);
+  background-color: var(--button-background-color);
+  color: var(--button-text-color);
+  background-color: var(--input-background-color);
+  border: 1px solid var(--input-border-color);
+  border-radius: var(--border-radius);
   cursor: pointer;
-  height: 40px;
-  width: 40px;
-  box-shadow: 0 4px 6px rgba(0, 123, 255, 0.3);
-  transition: background-color 0.3s ease, transform 0.3s ease;
+  height: var(--button-send-size);
+  width: var(--button-send-size);
+  transition: background-color 0.3s ease;
 }
 
-.side-panel .send-button:hover {
-  background-color: #0056b3;
-  transform: scale(1.1);
-  color: white;
+.llm-panel .send-button:hover {
+  background-color: var(--button-background-color-hover);
+  color: var(--button-text-color-hover);
 }
 
-/* History entry container */
-.side-panel .history-entry {
-  background-color: white;
-  padding-bottom: 10px;
-  border-radius: 10px;
+/* History Entry Container */
+.llm-panel .history-entry {
+  background-color: var(--background-color);
+  padding-bottom: var(--spacing-medium);
+  border-radius: var(--border-radius);
+  margin-bottom: var(--spacing-medium);
 }
 
-/* Response area (scrollable container) */
-.side-panel .responseArea {
+/* Response Area (Scrollable) */
+.llm-panel .responseArea {
   flex: 1;
-  background-color: white;
-  border-radius: 10px;
+  background-color: var(--background-color);
+  border-radius: var(--border-radius);
   overflow-y: auto;
-  box-shadow: inset 0 2px 4px rgba(0, 0, 0, 0.1);
+  padding: var(--spacing-medium);
+  margin-top: var(--spacing-medium);
 }
 
-/* Chat prompt bubble */
-.side-panel .prompt {
+/* Chat Prompt Bubble */
+.llm-panel .prompt {
   align-self: flex-start;
-  padding: 10px;
-  border-top-left-radius: 15px;
-  border-top-right-radius: 15px;
-  border-bottom-right-radius: 15px;
-  margin-right: 5%;
-  margin-bottom: 10px;
-  max-width: 90%;
-  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
-  white-space: pre-wrap;
-  background-color: #e0f7fa;
-  color: #000;
-}
-
-/* Chat response bubble */
-.side-panel .response {
-  align-self: flex-end;
-  padding: 10px;
-  border-top-left-radius: 15px;
-  border-top-right-radius: 15px;
-  border-bottom-left-radius: 15px;
+  padding: var(--spacing-medium);
+  border-radius: 25px;
   margin-left: 5%;
-  max-width: 90%;
-  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
-  background: #e0f7fa;
-  color: #000;
+  max-width: 100%;
+  white-space: pre-wrap;
+  background-color: var(--prompt-background-color);
+  color: var(--prompt-text-color);
+  margin-top: var(--spacing-small);
 }
 
-/* Copy button */
-.side-panel .copy-button {
-  font-size: 12px;
-  border: 0;
-  background-color: transparent;
-  color: #007bff;
+/* Chat Response Bubble */
+.llm-panel .response {
+  align-self: flex-end;
+  padding: var(--spacing-small);
+  background-color: var(--response-background-color);
+  color: var(--response-text-color);
+  margin-top: var(--spacing-small);
+}
+
+/* Copy & Thumbs Buttons */
+.llm-panel .copy-button,
+.llm-panel .thumbs-button {
+  font-size: var(--icon-size-small);
+  border: none;
+  background-color: var(--button-action-background-color);
+  color: var(--button-action-text-color);
   cursor: pointer;
-  width: 30px;
-  height: 30px;
+  width: var(--icon-button-size-small);
+  height: var(--icon-button-size-small);
   display: flex;
   justify-content: center;
   align-items: center;
 }
 
-/* Thumbs button (same style as copy button) */
-.side-panel .thumbs-button {
-  font-size: 12px;
-  border: 0;
-  background-color: transparent;
-  color: #007bff;
-  cursor: pointer;
-  width: 30px;
-  height: 30px;
+.llm-panel .copy-button:hover,
+.llm-panel .thumbs-button:hover {
+  color: var(--button-text-color-hover);
+  background-color: var(--button-background-color-hover);
+  box-shadow: 0 0 5px var(--button-background-color-hover);
+}
+
+/* SVG Icons */
+.llm-panel .icon-svg {
+  width: var(--icon-size-small);
+  height: var(--icon-size-small);
+  margin: 0;
+}
+
+.llm-panel .icon-svg-large {
+  width: var(--icon-size-large);
+  height: var(--icon-size-large);
+  margin: 0;
+}
+
+/* Button Container */
+.llm-panel .button-container {
   display: flex;
-  justify-content: center;
-  align-items: center;
+  margin-top: var(--spacing-medium);
 }
 
-/* Hover state for copy and thumbs buttons */
-.side-panel .copy-button:hover,
-.side-panel .thumbs-button:hover {
-  color: white;
-  border-radius: 50%;
-  background-color: #0056b3;
-}
-
-/* SVG icons */
-.side-panel .icon-svg {
-  width: 20px;
-  height: 20px;
-}
-
-.side-panel .icon-svg-large {
-  margin-right: 4px;
-  margin-top: 5px;
-}
-
-/* Button container for layout */
-.side-panel .button-container {
+/* Button Container (Actions) */
+.llm-panel .button-container-actions {
   display: flex;
-  margin-top: 10px;
-}
-
-/* Button container for actions (with spacing) */
-.side-panel .button-container-actions {
-  display: flex;
-  margin-top: 10px;
   justify-content: space-between;
-  gap: 5px;
+  gap: 0;
 }
 
-/* Scroll button (fixed at bottom center) */
-.side-panel .scroll-button {
+/* Scroll Button (Fixed at Bottom Center) */
+.llm-panel .scroll-button {
   position: absolute;
   left: 50%;
   transform: translateX(-50%);
   bottom: 5%;
-  background-color: #007bff;
-  color: white;
+  background-color: var(--button-scroll-background-color);
+  color: var(--button-scroll-text-color);
   border: none;
   border-radius: 50%;
-  width: 40px;
-  height: 40px;
+  height: 2.5rem;
+  width: 2.5rem;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -190,348 +267,89 @@
   z-index: 10;
 }
 
-.side-panel .scroll-button:hover {
-  background-color: #0056b3;
+.llm-panel .scroll-button:hover {
+  background-color: var(--button-scroll-background-color-hover);
 }
 
-/* Table styling */
-.side-panel table {
+/* Table Styling */
+.llm-panel table {
   border-collapse: collapse;
   margin-bottom: 1em;
-  border: 1px solid #777;
+  border: 1px solid var(--table-border-color);
 }
 
-.side-panel th,
-.side-panel td {
-  border: 1px solid #777;
+.llm-panel th,
+.llm-panel td {
+  border: 1px solid var(--table-border-color);
   padding: 8px;
 }
 
-/* Save button */
-.side-panel .save-button {
+/* Save, Email & CTA Button */
+.llm-panel .save-button {
   flex: 1;
-  background-color: lightblue;
-  color: #0056b3;
-  border: none;
-  border-radius: 2px;
+  background-color: var(--button-background-color);
+  color: var(--button-text-color);
+  border: 1px solid var(--button-border-color);
+  border-radius: var(--border-radius);
   cursor: pointer;
   padding: 5px 10px;
   font-size: 0.8em;
-  margin-top: 5px;
+  margin: var(--spacing-small);
   transition: background-color 0.3s ease, transform 0.3s ease;
+  box-shadow: var(--button-drop-shadow);
 }
 
-.side-panel .save-button:hover {
-  background-color: #0056b3;
-  color: white;
+.llm-panel .save-button:hover {
+  background-color: var(--button-background-color-hover);
+  color: var(--button-text-color-hover);
 }
 
-/* Suggestion buttons container */
-.suggestions-container {
-  display: flex;
-  flex-wrap: wrap;
-}
-
-/* Suggestion button */
-.side-panel .suggestion-button {
-  background-color: lightblue;
-  color: #0056b3;
-  border: none;
-  border-radius: 5px;
+/* Suggestion Buttons */
+.llm-panel .suggestion-button {
+  background-color: var(--button-background-color);
+  color: var(--button-text-color);
+  border: 1px solid var(--button-border-color);
+  border-radius: var(--border-radius);
   padding: 5px 10px;
   font-size: 0.8em;
   cursor: pointer;
-  margin: 5px;
+  margin: var(--spacing-small);
+  box-shadow: var(--button-drop-shadow);
 }
 
-.suggestion-button:hover {
-  background-color: #0056b3;
-  color: white;
+.llm-panel .suggestion-button:hover {
+  background-color: var(--button-background-color-hover);
+  color: var(--button-text-color-hover);
 }
 
-.suggestion-button:disabled {
+.llm-panel .suggestion-button:disabled {
   background-color: #cccccc;
   color: #666666;
   cursor: not-allowed;
 }
 
 /* --------------------------------------------------------
-   SIDE PANEL (Dark Theme)
+   Powered By / Footer
 -------------------------------------------------------- */
-
-/* Base container for dark side panel */
-.side-panel-dark {
-  font-family: "Roboto", Arial, Helvetica, sans-serif;
-  font-size: small;
-  color: #eee;
-  background-color: #424242;
-  display: flex;
-  flex-direction: column;
-  justify-content: space-between;
-  padding: 10px;
-  box-shadow: 5px 0 5px rgba(0, 0, 0, 0.1);
-  max-height: 90%;
-}
-
-/* Title */
-.side-panel-dark .title {
-  font-size: 24px;
-  font-weight: bold;
-  margin-bottom: 10px;
-  text-align: center;
-}
-
-/* Input container */
-.side-panel-dark .input-container {
-  display: flex;
-  flex-direction: row;
-  align-items: center;
-  margin-top: 5px;
-}
-
-/* Textarea */
-.side-panel-dark textarea {
-  flex: 1;
-  padding: 10px;
-  margin-right: 10px;
-  border-radius: 8px;
-  height: 50px;
-  min-height: 50px;
-  resize: vertical;
-  color: #333;
-  border: 1px solid #ddd;
-}
-
-/* Send button */
-.side-panel-dark .send-button {
-  background-color: #424242;
-  color: white;
-  border: none;
-  border-radius: 50%;
-  cursor: pointer;
-  height: 40px;
-  width: 40px;
-  display: flex;
-  justify-content: center;
-  align-items: center;
-  box-shadow: 0 4px 6px rgba(0, 123, 255, 0.3);
-  transition: background-color 0.3s ease, transform 0.3s ease;
-}
-
-.side-panel-dark .send-button:hover {
-  background-color: #0056b3;
-  transform: scale(1.1);
-}
-
-/* History entry */
-.side-panel-dark .history-entry {
-  background-color: #424242;
-  padding-bottom: 10px;
-  border-radius: 10px;
-}
-
-/* Response area */
-.side-panel-dark .responseArea {
-  flex: 1;
-  background-color: #424242;
-  border-radius: 10px;
-  overflow-y: auto;
-  box-shadow: inset 0 2px 4px rgba(0, 0, 0, 0.1);
-}
-
-/* Chat prompt bubble */
-.side-panel-dark .prompt {
-  align-self: flex-start;
-  background-color: #303030;
-  padding: 10px;
-  border-top-left-radius: 15px;
-  border-top-right-radius: 15px;
-  border-bottom-right-radius: 15px;
-  margin-right: 5%;
-  margin-bottom: 10px;
-  max-width: 90%;
-  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
-  white-space: pre-wrap;
-}
-
-/* Chat response bubble */
-.side-panel-dark .response {
-  align-self: flex-end;
-  padding: 10px;
-  border-top-left-radius: 15px;
-  border-top-right-radius: 15px;
-  border-bottom-left-radius: 15px;
-  margin-left: 5%;
-  max-width: 90%;
-  background-color: #3a3737;
-  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
-}
-
-/* Copy button */
-.side-panel-dark .copy-button {
-  font-size: 12px;
-  border: 0;
-  background-color: transparent;
-  color: #aaa;
-  cursor: pointer;
-  width: 30px;
-  height: 30px;
-  display: flex;
-  justify-content: center;
-  align-items: center;
-}
-
-/* SVG icons */
-.side-panel-dark .icon-svg {
-  width: 20px;
-  height: 20px;
-}
-
-.side-panel-dark .icon-svg-large {
-  margin-right: 4px;
-  margin-top: 5px;
-}
-
-/* Hover state for copy and thumbs buttons */
-.side-panel-dark .copy-button:hover,
-.side-panel-dark .thumbs-button:hover {
-  color: #0056b3;
-  border-radius: 50%;
-  background-color: #e2e6ea;
-}
-
-/* Thumbs button */
-.side-panel-dark .thumbs-button {
-  font-size: 12px;
-  border: 0;
-  background-color: transparent;
-  color: #aaa;
-  cursor: pointer;
-  width: 30px;
-  height: 30px;
-  display: flex;
-  justify-content: center;
-  align-items: center;
-}
-
-/* Button containers */
-.side-panel-dark .button-container {
-  display: flex;
-  margin-top: 10px;
-}
-
-.side-panel-dark .button-container-actions {
-  display: flex;
-  margin-top: 10px;
-  justify-content: space-between;
-  gap: 5px;
-}
-
-/* Scroll button */
-.side-panel-dark .scroll-button {
-  position: absolute;
-  left: 50%;
-  transform: translateX(-50%);
-  bottom: 5%;
-  background-color: #007bff;
-  color: white;
-  border: none;
-  border-radius: 50%;
-  width: 40px;
-  height: 40px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  cursor: pointer;
-  z-index: 10;
-}
-
-.side-panel-dark .scroll-button:hover {
-  background-color: #0056b3;
-}
-
-/* Table styling */
-.side-panel-dark table {
-  border-collapse: collapse;
-  margin-bottom: 1em;
-  border: 1px solid #ddd;
-}
-
-.side-panel-dark th,
-.side-panel-dark td {
-  border: 1px solid #ddd;
-  padding: 8px;
-}
-
-/* Links */
-.side-panel-dark a {
-  color: #ddd;
-}
-
-.side-panel-dark a:hover {
-  color: #fff;
-}
-
-/* Save button */
-.side-panel-dark .save-button {
-  flex: 1;
-  background-color: #3a3737;
-  color: white;
-  border: none;
-  border-radius: 2px;
-  cursor: pointer;
-  padding: 5px 10px;
-  font-size: 0.8em;
-  margin-top: 5px;
-}
-
-.side-panel-dark .save-button:hover {
-  background-color: #0056b3;
-  color: white;
-}
-
-/* Suggestion button */
-.side-panel-dark .suggestion-button {
-  background-color: #0056b3;
-  color: white;
-  border: none;
-  border-radius: 5px;
-  padding: 5px 10px;
-  font-size: 0.8em;
-  cursor: pointer;
-  margin: 5px;
-}
-
-.side-panel-dark .suggestion-button:hover {
-  background-color: lightblue;
-  color: black;
-}
-
-/* --------------------------------------------------------
-   POWERED BY / FOOTER
--------------------------------------------------------- */
-
 .powered-by {
-  margin-top: 3px;
   display: flex;
   justify-content: center;
   align-items: center;
-  color: lightgrey;
+  color: var(--powered-by-text-color);
   font-size: 0.8em;
   height: 100%;
   text-align: center;
 }
 
 .powered-by a {
-  color: lightgrey;
+  color: var(--powered-by-text-color);
   text-decoration: underline;
 }
 
 /* --------------------------------------------------------
-   MODAL DIALOG
+   Modal Dialog
 -------------------------------------------------------- */
-
-/* Modal overlay (full screen dim background) */
+/* Modal Overlay */
 .modal-overlay {
   position: fixed;
   top: 0;
@@ -544,7 +362,7 @@
   align-items: center;
 }
 
-/* Modal content container */
+/* Modal Content */
 .modal-content {
   background: white;
   padding: 5px;
@@ -554,19 +372,19 @@
   color: #333;
 }
 
-/* Modal text */
+/* Modal Text */
 .modal-text {
   color: black;
 }
 
-/* Modal buttons container */
+/* Modal Buttons Container */
 .modal-buttons {
   padding: 5px 10px;
   display: flex;
   justify-content: space-between;
 }
 
-/* Modal button styling */
+/* Modal Button Styling */
 .modal-buttons button {
   padding: 5px 10px;
   border: none;
@@ -574,29 +392,24 @@
   cursor: pointer;
 }
 
-/* First modal button */
 .modal-buttons button:first-child {
   background: #ccc;
 }
 
-/* Second modal button */
 .modal-buttons button:last-child {
   background: #007bff;
   color: white;
 }
 
 /* --------------------------------------------------------
-   FORM ERROR STYLING
+   Form Error Styling
 -------------------------------------------------------- */
-
-/* Invalid field outline */
 .invalid {
   border-color: red;
 }
 
-/* Error message text */
 .error-message {
   color: red;
   font-size: 0.8em;
-  margin-top: 5px;
+  margin-top: var(--spacing-small);
 }
