@@ -64,8 +64,6 @@ export interface ChatPanelProps {
   callToActionEmailAddress?: string;
   callToActionEmailSubject?: string;
   callToActionMustSendEmail?: boolean;
-  ragQueryLimit?: number;
-  ragRankLimit?: number;
   initialHistory?: {
     [prompt: string]: { content: string; callId: string };
   };
@@ -114,8 +112,6 @@ const ChatPanel: React.FC<ChatPanelProps & ExtraProps> = ({
   callToActionEmailAddress = "",
   callToActionEmailSubject = "Agent CTA submitted",
   callToActionMustSendEmail = false,
-  ragQueryLimit = 10,
-  ragRankLimit = 5,
   initialHistory = {},
   hideRagContextInPrompt = true,
 }) => {
@@ -123,9 +119,7 @@ const ChatPanel: React.FC<ChatPanelProps & ExtraProps> = ({
     project_id: project_id,
     customer: customer,
     url: url,
-    agent: agent,
-    ragQueryLimit: ragQueryLimit,
-    ragRankLimit: ragRankLimit,
+    agent: agent
   });
 
   const [nextPrompt, setNextPrompt] = useState("");

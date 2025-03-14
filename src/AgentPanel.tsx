@@ -82,7 +82,7 @@ const AgentPanel: React.FC<AgentPanelProps & ExtraProps> = ({
   url = "https://chat.llmasaservice.io/",
   //scrollToEnd = false,
   //initialMessage = "",
-  //prismStyle = theme === "light" ? materialLight : materialDark,
+  prismStyle = null,
   service = null,
   historyChangedCallback = undefined,
   responseCompleteCallback = undefined,
@@ -200,9 +200,12 @@ const AgentPanel: React.FC<AgentPanelProps & ExtraProps> = ({
           historyChangedCallback={historyChangedCallback}
           responseCompleteCallback={responseCompleteCallback}
           prismStyle={
-            (agentData?.displayTheme === "light"
-              ? materialLight
-              : materialDark) as any
+            prismStyle ??
+            (theme
+              ? ((theme === "light" ? materialLight : materialDark) as any)
+              : ((agentData?.displayTheme === "light"
+                  ? materialLight
+                  : materialDark) as any))
           }
           actions={[
             ...actions,
@@ -235,8 +238,6 @@ const AgentPanel: React.FC<AgentPanelProps & ExtraProps> = ({
               : customer_email ?? "",
           }}
           scrollToEnd={agentData?.displayScrollToEnd ?? false}
-          ragQueryLimit={agentData?.ragQueryLimit ?? 10}
-          ragRankLimit={agentData?.ragRankLimit ?? 5}
           showPoweredBy={showPoweredBy}
           messages={messages}
           conversation={conversation}
