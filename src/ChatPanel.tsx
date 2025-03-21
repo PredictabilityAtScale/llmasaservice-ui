@@ -68,6 +68,7 @@ export interface ChatPanelProps {
     [prompt: string]: { content: string; callId: string };
   };
   hideRagContextInPrompt?: boolean;
+  createConversationOnFirstChat?: boolean;
 }
 
 interface ExtraProps extends React.HTMLAttributes<HTMLElement> {
@@ -114,12 +115,13 @@ const ChatPanel: React.FC<ChatPanelProps & ExtraProps> = ({
   callToActionMustSendEmail = false,
   initialHistory = {},
   hideRagContextInPrompt = true,
+  createConversationOnFirstChat = true,
 }) => {
   const { send, response, idle, stop, lastCallId } = useLLM({
     project_id: project_id,
     customer: customer,
     url: url,
-    agent: agent
+    agent: agent,
   });
 
   const [nextPrompt, setNextPrompt] = useState("");
@@ -139,11 +141,26 @@ const ChatPanel: React.FC<ChatPanelProps & ExtraProps> = ({
   const [hasSentCallToActionEmail, setHasSentCallToActionEmail] =
     useState(false);
 
+  const [currentConversation, setCurrentConversation] = useState<string | null>(
+    conversation
+  );
+
   const handleSendEmail = (to: string, from: string) => {
     sendConversationsViaEmail(to, `Conversation History from ${title}`, from);
   };
 
   const responseAreaRef = useRef(null);
+
+  let publicAPIUrl = "https://api.llmasaservice.io";
+
+  // if the url is localhost or dev.llmasaservice.io, we are in development mode and we should use the dev endpoint
+  if (
+    window.location.hostname === "localhost" ||
+    window.location.hostname === "dev.llmasaservice.io"
+  ) {
+    //publicAPIUrl = "https://duzyq4e8ql.execute-api.us-east-1.amazonaws.com/dev";
+    publicAPIUrl = "https://8ftw8droff.execute-api.us-east-1.amazonaws.com/dev";
+  }
 
   useEffect(() => {
     if (responseCompleteCallback) {
@@ -155,11 +172,11 @@ const ChatPanel: React.FC<ChatPanelProps & ExtraProps> = ({
   useEffect(() => {
     if (Object.keys(initialHistory).length === 0) return;
     setHistory(initialHistory);
-
   }, [initialHistory]);
 
   useEffect(() => {
     if (!conversation || conversation === "") return;
+    setCurrentConversation(conversation);
     setHistory(initialHistory);
   }, [conversation]);
 
@@ -187,20 +204,24 @@ const ChatPanel: React.FC<ChatPanelProps & ExtraProps> = ({
 
   useEffect(() => {
     // Clean up any previously added CSS from this component
-    const existingLinks = document.querySelectorAll('link[data-source="llmasaservice-ui"]');
-    existingLinks.forEach(link => link.parentNode?.removeChild(link));
-    
-    const existingStyles = document.querySelectorAll('style[data-source="llmasaservice-ui"]');
-    existingStyles.forEach(style => style.parentNode?.removeChild(style));
-    
+    const existingLinks = document.querySelectorAll(
+      'link[data-source="llmasaservice-ui"]'
+    );
+    existingLinks.forEach((link) => link.parentNode?.removeChild(link));
+
+    const existingStyles = document.querySelectorAll(
+      'style[data-source="llmasaservice-ui"]'
+    );
+    existingStyles.forEach((style) => style.parentNode?.removeChild(style));
+
     if (cssUrl) {
-      if (cssUrl.startsWith('http://') || cssUrl.startsWith('https://')) {
+      if (cssUrl.startsWith("http://") || cssUrl.startsWith("https://")) {
         // If it's a URL, create a link element
         const link = document.createElement("link");
         link.href = cssUrl;
         link.rel = "stylesheet";
         // Add a data attribute to identify and remove this link later if needed
-        link.setAttribute('data-source', 'llmasaservice-ui');
+        link.setAttribute("data-source", "llmasaservice-ui");
         document.head.appendChild(link);
         console.log("Added CSS link", link);
       } else {
@@ -208,19 +229,23 @@ const ChatPanel: React.FC<ChatPanelProps & ExtraProps> = ({
         const style = document.createElement("style");
         style.textContent = cssUrl;
         // Add a data attribute to identify and remove this style later if needed
-        style.setAttribute('data-source', 'llmasaservice-ui');
+        style.setAttribute("data-source", "llmasaservice-ui");
         document.head.appendChild(style);
         console.log("Added inline CSS");
       }
     }
-    
+
     // Clean up when component unmounts
     return () => {
-      const links = document.querySelectorAll('link[data-source="llmasaservice-ui"]');
-      links.forEach(link => link.parentNode?.removeChild(link));
-      
-      const styles = document.querySelectorAll('style[data-source="llmasaservice-ui"]');
-      styles.forEach(style => style.parentNode?.removeChild(style));
+      const links = document.querySelectorAll(
+        'link[data-source="llmasaservice-ui"]'
+      );
+      links.forEach((link) => link.parentNode?.removeChild(link));
+
+      const styles = document.querySelectorAll(
+        'style[data-source="llmasaservice-ui"]'
+      );
+      styles.forEach((style) => style.parentNode?.removeChild(style));
     };
   }, [cssUrl]);
 
@@ -310,7 +335,7 @@ const ChatPanel: React.FC<ChatPanelProps & ExtraProps> = ({
           true,
           true,
           service,
-          conversation,
+          currentConversation,
           controller
         );
         setLastPrompt(initialPrompt);
@@ -365,123 +390,164 @@ const ChatPanel: React.FC<ChatPanelProps & ExtraProps> = ({
 
   const continueChat = (suggestion?: string) => {
     console.log("continueChat", suggestion);
-    if (!idle) {
-      stop(lastController);
 
-      setHistory((prevHistory) => {
-        return {
-          ...prevHistory,
-          [lastKey ?? ""]: {
-            content: response + "\n\n(response cancelled)",
-            callId: lastCallId,
-          },
-        };
-      });
-
-      return;
-    }
-
-    if (clearFollowOnQuestionsNextPrompt) {
-      followOnQuestions = [];
-      const suggestionsContainer = document.querySelector(
-        ".suggestions-container"
-      );
-      if (suggestionsContainer) {
-        suggestionsContainer.innerHTML = "";
-      }
-    }
-
-    if (
-      (suggestion && suggestion !== "") ||
-      (nextPrompt && nextPrompt !== "")
-    ) {
-      setIsLoading(true);
-
-      // build the chat input from history
-      const messagesAndHistory = messages;
-      Object.entries(history).forEach(([prompt, response]) => {
-        let promptToSend = prompt;
-        if (promptTemplate && promptTemplate !== "") {
-          promptToSend = promptTemplate.replace("{{prompt}}", promptToSend);
-          for (let i = 0; i < data.length; i++) {
-            promptToSend = promptToSend.replace(
-              "{{" + data[i]?.key + "}}",
-              data[i]?.data ?? ""
-            );
-          }
-        }
-
-        messagesAndHistory.push({ role: "user", content: promptToSend });
-        messagesAndHistory.push({
-          role: "assistant",
-          content: response.content,
-        });
-      });
-
-      let nextPromptToSend = suggestion ?? nextPrompt;
-
-      let promptKey = nextPromptToSend ?? "";
-      let lastPromptKeyCharacter = promptKey[promptKey.length - 1] ?? "";
-
-      const count = Object.keys(history).filter((key) => {
-        return (
-          key.startsWith(promptKey) &&
-          promptKey.length > 0 &&
-          (key.endsWith(lastPromptKeyCharacter) || key.endsWith(")")) // the first or subsequent identical prompt beginnings
-        );
-      }).length;
-
-      if (count > 0) {
-        promptKey += ` (${count + 1})`;
-      }
-
-      // set the history prompt with the about to be sent prompt
-      setHistory((prevHistory) => {
-        return {
-          ...prevHistory,
-          [promptKey ?? ""]: { content: "", callId: "" },
-        };
-      });
-
-      // if this is the first user message, use the template. otherwise it is a follow-on question(s)
+    const ensureConversation = () => {
       if (
-        (initialPrompt &&
-          initialPrompt !== "" &&
-          Object.keys(history).length === 1) ||
-        ((!initialPrompt || initialPrompt === "") &&
-          Object.keys(history).length === 0)
+        (!currentConversation || currentConversation === "") &&
+        createConversationOnFirstChat
       ) {
-        if (promptTemplate && promptTemplate !== "") {
-          nextPromptToSend = promptTemplate.replace(
-            "{{prompt}}",
-            nextPromptToSend
-          );
-          for (let i = 0; i < data.length; i++) {
-            nextPromptToSend = nextPromptToSend.replace(
-              "{{" + data[i]?.key + "}}",
-              data[i]?.data ?? ""
-            );
-          }
+        return fetch(`${publicAPIUrl}/conversations`, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            project_id: project_id ?? "",
+            agentId: agent,
+            customerId: customer?.customer_id ?? null,
+            customerEmail: customer?.customer_name ?? null,
+          }),
+        })
+          .then((res) => res.json())
+          .then((newConvo) => {
+            if (newConvo?.id) {
+              console.log("new conversation created", newConvo.id);
+              setCurrentConversation(newConvo.id);
+              return newConvo.id;
+            }
+            return "";
+          })
+          .catch((error) => {
+            console.error("Error creating new conversation", error);
+            return "";
+          });
+      }
+      // If a currentConversation exists, return it in a resolved Promise.
+      return Promise.resolve(currentConversation);
+    };
+
+    // wait till new conversation created....
+    ensureConversation().then((convId) => {
+      if (!idle) {
+        stop(lastController);
+
+        setHistory((prevHistory) => {
+          return {
+            ...prevHistory,
+            [lastKey ?? ""]: {
+              content: response + "\n\n(response cancelled)",
+              callId: lastCallId,
+            },
+          };
+        });
+
+        return;
+      }
+
+      if (clearFollowOnQuestionsNextPrompt) {
+        followOnQuestions = [];
+        const suggestionsContainer = document.querySelector(
+          ".suggestions-container"
+        );
+        if (suggestionsContainer) {
+          suggestionsContainer.innerHTML = "";
         }
       }
 
-      const controller = new AbortController();
-      send(
-        nextPromptToSend,
-        messagesAndHistory,
-        data,
-        true,
-        true,
-        service,
-        conversation,
-        controller
-      );
+      if (
+        (suggestion && suggestion !== "") ||
+        (nextPrompt && nextPrompt !== "")
+      ) {
+        setIsLoading(true);
 
-      setLastPrompt(nextPromptToSend);
-      setLastKey(promptKey);
-      setLastController(controller);
-      setNextPrompt("");
-    }
+        // build the chat input from history
+        const messagesAndHistory = messages;
+        Object.entries(history).forEach(([prompt, response]) => {
+          let promptToSend = prompt;
+          if (promptTemplate && promptTemplate !== "") {
+            promptToSend = promptTemplate.replace("{{prompt}}", promptToSend);
+            for (let i = 0; i < data.length; i++) {
+              promptToSend = promptToSend.replace(
+                "{{" + data[i]?.key + "}}",
+                data[i]?.data ?? ""
+              );
+            }
+          }
+
+          messagesAndHistory.push({ role: "user", content: promptToSend });
+          messagesAndHistory.push({
+            role: "assistant",
+            content: response.content,
+          });
+        });
+
+        let nextPromptToSend = suggestion ?? nextPrompt;
+
+        let promptKey = nextPromptToSend ?? "";
+        let lastPromptKeyCharacter = promptKey[promptKey.length - 1] ?? "";
+
+        const count = Object.keys(history).filter((key) => {
+          return (
+            key.startsWith(promptKey) &&
+            promptKey.length > 0 &&
+            (key.endsWith(lastPromptKeyCharacter) || key.endsWith(")")) // the first or subsequent identical prompt beginnings
+          );
+        }).length;
+
+        if (count > 0) {
+          promptKey += ` (${count + 1})`;
+        }
+
+        // set the history prompt with the about to be sent prompt
+        setHistory((prevHistory) => {
+          return {
+            ...prevHistory,
+            [promptKey ?? ""]: { content: "", callId: "" },
+          };
+        });
+
+        // if this is the first user message, use the template. otherwise it is a follow-on question(s)
+        if (
+          (initialPrompt &&
+            initialPrompt !== "" &&
+            Object.keys(history).length === 1) ||
+          ((!initialPrompt || initialPrompt === "") &&
+            Object.keys(history).length === 0)
+        ) {
+          if (promptTemplate && promptTemplate !== "") {
+            nextPromptToSend = promptTemplate.replace(
+              "{{prompt}}",
+              nextPromptToSend
+            );
+            for (let i = 0; i < data.length; i++) {
+              nextPromptToSend = nextPromptToSend.replace(
+                "{{" + data[i]?.key + "}}",
+                data[i]?.data ?? ""
+              );
+            }
+          }
+        }
+
+        console.log("Sending for conversation", convId);
+
+        const controller = new AbortController();
+        send(
+          nextPromptToSend,
+          messagesAndHistory,
+          data,
+          true,
+          true,
+          service,
+          convId,
+          controller
+        );
+
+        setLastPrompt(nextPromptToSend);
+        setLastKey(promptKey);
+        setLastController(controller);
+        setNextPrompt("");
+      }
+    });
   };
 
   const replaceHistory = (newHistory: {
@@ -643,7 +709,9 @@ const ChatPanel: React.FC<ChatPanelProps & ExtraProps> = ({
         html += `
       <div class="history-entry">
         <div class="prompt-container">
-          <div class="prompt">${convertMarkdownToHTML(formatPromptForDisplay(prompt))}</div>
+          <div class="prompt">${convertMarkdownToHTML(
+            formatPromptForDisplay(prompt)
+          )}</div>
         </div>
         <div class="response-container">
           <div class="response">${convertMarkdownToHTML(response.content)}</div>
@@ -682,16 +750,6 @@ const ChatPanel: React.FC<ChatPanelProps & ExtraProps> = ({
   const handleSuggestionClick = (suggestion: string) => {
     continueChat(suggestion);
   };
-
-  let publicAPIUrl = "https://api.llmasaservice.io";
-
-  // if the url is localhost or dev.llmasaservice.io, we are in development mode and we should use the dev endpoint
-  if (
-    window.location.hostname === "localhost" ||
-    window.location.hostname === "dev.llmasaservice.io"
-  ) {
-    publicAPIUrl = "https://duzyq4e8ql.execute-api.us-east-1.amazonaws.com/dev";
-  }
 
   const sendConversationsViaEmail = (
     to: string,
@@ -771,22 +829,24 @@ const ChatPanel: React.FC<ChatPanelProps & ExtraProps> = ({
     if (!prompt) {
       return "";
     }
-    
+
     if (hideRagContextInPrompt && prompt.includes("CONTEXT:")) {
       const parts = prompt.split("CONTEXT:");
-      const withoutContext = parts.length > 0 ? parts[0] as string : "";
-      
+      const withoutContext = parts.length > 0 ? (parts[0] as string) : "";
+
       // Remove the optional chaining since withoutContext is always a string
       if (withoutContext.includes("PROMPT:")) {
         const promptParts = withoutContext.split("PROMPT:");
-        return promptParts.length > 1 ? (promptParts[1] || "").trim() : withoutContext.trim();
+        return promptParts.length > 1
+          ? (promptParts[1] || "").trim()
+          : withoutContext.trim();
       }
-      
+
       return withoutContext.trim();
     }
-    
+
     return prompt;
-  }
+  };
 
   return (
     <>

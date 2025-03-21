@@ -59,6 +59,7 @@ export interface AgentPanelProps {
   //ragRankLimit?: number;
   initialHistory?: { [key: string]: { content: string; callId: string } };
   hideRagContextInPrompt?: boolean;
+  createConversationOnFirstChat?: boolean;
 }
 interface ExtraProps extends React.HTMLAttributes<HTMLElement> {
   inline?: boolean;
@@ -105,6 +106,7 @@ const AgentPanel: React.FC<AgentPanelProps & ExtraProps> = ({
   //ragRankLimit = 5,
   initialHistory = {},
   hideRagContextInPrompt = true,
+  createConversationOnFirstChat = true,
 }) => {
   const [followOnPrompt, setFollowOnPrompt] = useState<string>("");
 
@@ -243,6 +245,7 @@ const AgentPanel: React.FC<AgentPanelProps & ExtraProps> = ({
           conversation={conversation}
           initialHistory={initialHistory}
           hideRagContextInPrompt={hideRagContextInPrompt}
+          createConversationOnFirstChat={createConversationOnFirstChat}
         />
       )}
     </>
