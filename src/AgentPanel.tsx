@@ -54,7 +54,6 @@ export interface AgentPanelProps {
   //callToActionButtonText?: string;
   //callToActionEmailAddress?: string;
   //callToActionEmailSubject?: string;
-  //callToActionMustSendEmail?: boolean;
   //ragQueryLimit?: number;
   //ragRankLimit?: number;
   initialHistory?: { [key: string]: { content: string; callId: string } };
@@ -101,7 +100,6 @@ const AgentPanel: React.FC<AgentPanelProps & ExtraProps> = ({
   //callToActionButtonText = "Submit",
   //callToActionEmailAddress = "",
   //callToActionEmailSubject = "Agent CTA submitted",
-  //callToActionMustSendEmail = false,
   //ragQueryLimit = 10,
   //ragRankLimit = 5,
   initialHistory = {},
@@ -229,9 +227,6 @@ const AgentPanel: React.FC<AgentPanelProps & ExtraProps> = ({
           }
           callToActionEmailSubject={
             agentData?.displayCallToActionEmailSubject ?? "Agent CTA Submitted"
-          }
-          callToActionMustSendEmail={
-            agentData?.displayCallToActionMustSendEmail ?? false
           }
           customer={{
             customer_id: customer ? customer.customer_id : customer_id ?? "",

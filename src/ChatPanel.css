@@ -41,6 +41,8 @@
   --button-background-color-hover: #777;
   --button-text-color-hover: #fff;
   --button-drop-shadow: 2px 2px 4px rgba(0, 0, 0, 0.15);
+  --button-disabled-color: #ccc;
+  --button-disabled-background-color: #eee;
 
   --button-action-background-color: transparent;
   --button-action-text-color: #999;
@@ -56,8 +58,11 @@
   --button-scroll-background-color-hover: #999;
 
   --table-border-color: #777;
-
   --powered-by-text-color: #999;
+
+  --background-color-mandatory: #ffcccc;
+  --border-color-mandatory: #ff5555;
+  --text-color-manadatory: #ff5555;
 }
 
 /* Dark Theme Overrides */
@@ -78,6 +83,8 @@
   --button-background-color-hover: #505050;
   --button-text-color-hover: #fff;
   --button-drop-shadow: 2px 2px 4px rgba(0, 0, 0, 0.5);
+  --button-disabled-color: #808080;
+  --button-disabled-background-color: #505050;
 
   --button-action-background-color: transparent;
   --button-action-text-color: #bbb;
@@ -93,6 +100,10 @@
   --button-scroll-background-color-hover: #606060;
 
   --table-border-color: #444;
+
+  --background-color-mandatory: #2c2c2c;
+  --border-color-mandatory: #ff5555;
+  --text-color-manadatory: #e0e0e0;
 }
 
 /* --------------------------------------------------------
@@ -126,6 +137,68 @@
   margin-top: var(--spacing-small);
 }
 
+.llm-panel .email-input-container {
+  display: flex;
+  flex-direction: row;
+  width: 100%;
+  gap: var(--spacing-small);
+  margin-top: var(--spacing-small);
+  margin-bottom: var(--spacing-small);
+  padding-right: var(--spacing-small);
+}
+
+.llm-panel .email-input {
+  flex: 1;
+  color: var(--input-text-color);
+  padding: var(--spacing-small);
+  background-color: var(--input-background-color);
+  border: 1px solid var(--input-border-color);
+}
+
+.llm-panel .email-input-invalid {
+  flex: 1;
+  color: var(--input-text-color);
+  padding: var(--spacing-small);
+  background-color: var(--background-color-mandatory);
+  border: 1px solid var(--border-color-mandatory);
+}
+
+.llm-panel .email-input-message {
+  color: var(--text-color-manadatory);
+  font-size: 0.8em;
+  margin-top: var(--spacing-small);
+}
+
+.llm-panel .email-input-invalid::placeholder {
+  color: var(--text-color-manadatory);
+}
+
+.llm-panel .email-input-set {
+  flex: 1;
+  color: var(--input-text-color);
+  padding: var(--spacing-small);
+  background-color: var(--background-color);
+  border: 0px solid var(--background-color);
+  opacity: 0.7;
+  user-select: none;
+}
+
+.llm-panel .email-input-button:hover {
+  background-color: var(--button-background-color-hover);
+  color: var(--button-text-color-hover);
+}
+
+.llm-panel .email-input-button {
+  padding: var(--spacing-small);
+  background-color: var(--button-background-color);
+  color: var(--button-text-color);
+  border-radius: var(--border-radius);
+  border: 1px solid var(--button-border-color);
+  cursor: pointer;
+  transition: background-color 0.3s ease;
+  white-space: nowrap;
+}
+
 /* Textarea Styling */
 .llm-panel .chat-input {
   flex: 1;
@@ -133,19 +206,27 @@
   margin: 0 var(--spacing-small);
   padding: var(--spacing-small);
   border-radius: var(--border-radius);
-  height:  var(--input-height);
+  height: var(--input-height);
   min-height: var(--input-height);
   resize: vertical;
   background-color: var(--input-background-color);
   border: 1px solid var(--input-border-color);
 }
 
-/* Accessible Focus State */
 .llm-panel .chat-input:focus,
 .llm-panel input:focus {
   outline: none;
   border: 2px solid var(--button-background-color-hover);
   box-shadow: 0 0 5px var(--button-background-color-hover);
+}
+
+.llm-panel .chat-input:disabled {
+  background-color: var(--button-disabled-background-color);
+  cursor: not-allowed;
+}
+
+.llm-panel .chat-input:disabled::placeholder {
+  color: var(--button-disabled-color);
 }
 
 /* Send Button */
@@ -166,6 +247,12 @@
 .llm-panel .send-button:hover {
   background-color: var(--button-background-color-hover);
   color: var(--button-text-color-hover);
+}
+
+.llm-panel .send-button:disabled {
+  cursor: not-allowed;
+  color: var(--button-disabled-color);
+  background-color: var(--button-disabled-background-color);
 }
 
 /* History Entry Container */
@@ -228,6 +315,13 @@
   color: var(--button-text-color-hover);
   background-color: var(--button-background-color-hover);
   box-shadow: 0 0 5px var(--button-background-color-hover);
+}
+
+.llm-panel .copy-button:disabled,
+.llm-panel .thumbs-button:disabled {
+  cursor: not-allowed;
+  color: var(--button-disabled-color);
+  background-color: var(--button-disabled-background-color);
 }
 
 /* SVG Icons */
@@ -307,6 +401,12 @@
   box-shadow: var(--button-drop-shadow);
 }
 
+.llm-panel .save-button:disabled {
+  cursor: not-allowed;
+  color: var(--button-disabled-color);
+  background-color: var(--button-disabled-background-color);
+}
+
 .llm-panel .save-button:hover {
   background-color: var(--button-background-color-hover);
   color: var(--button-text-color-hover);
@@ -331,8 +431,8 @@
 }
 
 .llm-panel .suggestion-button:disabled {
-  background-color: #cccccc;
-  color: #666666;
+  background-color: var(--button-disabled-color);
+  color: var(--button-disabled-background-color);
   cursor: not-allowed;
 }
 

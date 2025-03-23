@@ -1,7 +1,6 @@
 import { LLMAsAServiceCustomer, useLLM } from "llmasaservice-client";
 import React, { useEffect, useRef, useState } from "react";
 import ReactMarkdown from "react-markdown";
-import remarkHtml from "remark-html";
 import rehypeRaw from "rehype-raw";
 import ReactDOMServer from "react-dom/server";
 import "./ChatPanel.css";
@@ -11,7 +10,6 @@ import PrismStyle from "react-syntax-highlighter";
 import materialDark from "react-syntax-highlighter/dist/esm/styles/prism/material-dark.js";
 import materialLight from "react-syntax-highlighter/dist/esm/styles/prism/material-light.js";
 import EmailModal from "./EmailModal";
-import CallToActionlModal from "./CallToActionModal";
 
 export interface ChatPanelProps {
   project_id: string;
@@ -63,12 +61,13 @@ export interface ChatPanelProps {
   callToActionButtonText?: string;
   callToActionEmailAddress?: string;
   callToActionEmailSubject?: string;
-  callToActionMustSendEmail?: boolean;
   initialHistory?: {
     [prompt: string]: { content: string; callId: string };
   };
   hideRagContextInPrompt?: boolean;
   createConversationOnFirstChat?: boolean;
+  customerEmailCaptureMode?: "hide" | "optional" | "required";
+  customerEmailCapturePlaceholder?: string;
 }
 
 interface ExtraProps extends React.HTMLAttributes<HTMLElement> {
@@ -112,17 +111,16 @@ const ChatPanel: React.FC<ChatPanelProps & ExtraProps> = ({
   callToActionButtonText = "Submit",
   callToActionEmailAddress = "",
   callToActionEmailSubject = "Agent CTA submitted",
-  callToActionMustSendEmail = false,
   initialHistory = {},
   hideRagContextInPrompt = true,
   createConversationOnFirstChat = true,
+  customerEmailCaptureMode = "hide",
+  customerEmailCapturePlaceholder = "Please enter your email...",
 }) => {
-  const { send, response, idle, stop, lastCallId } = useLLM({
-    project_id: project_id,
-    customer: customer,
-    url: url,
-    agent: agent,
-  });
+  const isEmailAddress = (email: string): boolean => {
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    return emailRegex.test(email);
+  };
 
   const [nextPrompt, setNextPrompt] = useState("");
   const [lastController, setLastController] = useState(new AbortController());
@@ -137,17 +135,40 @@ const ChatPanel: React.FC<ChatPanelProps & ExtraProps> = ({
   const bottomPanelRef = useRef<HTMLDivElement | null>(null);
   const [isAtBottom, setIsAtBottom] = useState(true);
   const [isEmailModalOpen, setIsEmailModalOpen] = useState(false);
-  const [isCallToActionModalOpen, setIsCallToActionModalOpen] = useState(false);
-  const [hasSentCallToActionEmail, setHasSentCallToActionEmail] =
-    useState(false);
 
   const [currentConversation, setCurrentConversation] = useState<string | null>(
     conversation
   );
+  const [emailInput, setEmailInput] = useState(
+    customer?.customer_user_email ?? ""
+  );
+  const [emailInputSet, setEmailInputSet] = useState(
+    isEmailAddress(emailInput)
+  );
+  const [emailValid, setEmailValid] = useState(true);
+  const [showEmailPanel, setShowEmailPanel] = useState(
+    customerEmailCaptureMode !== "hide"
+  );
+  const [callToActionSent, setCallToActionSent] = useState(false);
+  const [CTAClickedButNoEmail, setCTAClickedButNoEmail] = useState(false);
+  const [emailSent, setEmailSent] = useState(false);
+  const [emailClickedButNoEmail, setEmailClickedButNoEmail] = useState(false);
 
   const handleSendEmail = (to: string, from: string) => {
     sendConversationsViaEmail(to, `Conversation History from ${title}`, from);
+    interactionClicked(lastCallId, "email", to);
+    setEmailSent(true);
   };
+
+  const [currentCustomer, setCurrentCustomer] =
+    useState<LLMAsAServiceCustomer>(customer);
+
+  const { send, response, idle, stop, lastCallId } = useLLM({
+    project_id: project_id,
+    customer: currentCustomer,
+    url: url,
+    agent: agent,
+  });
 
   const responseAreaRef = useRef(null);
 
@@ -161,6 +182,16 @@ const ChatPanel: React.FC<ChatPanelProps & ExtraProps> = ({
     //publicAPIUrl = "https://duzyq4e8ql.execute-api.us-east-1.amazonaws.com/dev";
     publicAPIUrl = "https://8ftw8droff.execute-api.us-east-1.amazonaws.com/dev";
   }
+
+  useEffect(() => {
+    setShowEmailPanel(customerEmailCaptureMode !== "hide");
+
+    if (customerEmailCaptureMode === "required") {
+      if (!isEmailAddress(emailInput)) {
+        setEmailValid(false);
+      }
+    }
+  }, [customerEmailCaptureMode]);
 
   useEffect(() => {
     if (responseCompleteCallback) {
@@ -179,28 +210,6 @@ const ChatPanel: React.FC<ChatPanelProps & ExtraProps> = ({
     setCurrentConversation(conversation);
     setHistory(initialHistory);
   }, [conversation]);
-
-  useEffect(() => {
-    const handleBeforeUnload = (event: BeforeUnloadEvent) => {
-      if (
-        callToActionMustSendEmail &&
-        showCallToAction &&
-        callToActionEmailAddress &&
-        callToActionEmailAddress !== "" &&
-        !hasSentCallToActionEmail
-      ) {
-        event.preventDefault();
-        event.returnValue = ""; // Chrome requires returnValue to be set
-        setIsCallToActionModalOpen(true);
-      }
-    };
-
-    window.addEventListener("beforeunload", handleBeforeUnload);
-
-    return () => {
-      window.removeEventListener("beforeunload", handleBeforeUnload);
-    };
-  }, []);
 
   useEffect(() => {
     // Clean up any previously added CSS from this component
@@ -292,6 +301,7 @@ const ChatPanel: React.FC<ChatPanelProps & ExtraProps> = ({
                       try {
                         const func = new Function("match", action.clickCode);
                         func(match);
+                        interactionClicked(lastCallId, "action");
                       } catch (error) {
                         console.error("Error executing clickCode:", error);
                       }
@@ -325,23 +335,25 @@ const ChatPanel: React.FC<ChatPanelProps & ExtraProps> = ({
       if (initialPrompt !== lastPrompt) {
         setIsLoading(true);
 
-        if (lastController) stop(lastController);
-        const controller = new AbortController();
+        ensureConversation().then((convId) => {
+          if (lastController) stop(lastController);
+          const controller = new AbortController();
 
-        send(
-          initialPrompt,
-          messages,
-          data,
-          true,
-          true,
-          service,
-          currentConversation,
-          controller
-        );
-        setLastPrompt(initialPrompt);
-        setLastKey(initialPrompt);
-        setLastController(controller);
-        setHistory({});
+          send(
+            initialPrompt,
+            messages,
+            data,
+            true,
+            true,
+            service,
+            convId,
+            controller
+          );
+          setLastPrompt(initialPrompt);
+          setLastKey(initialPrompt);
+          setLastController(controller);
+          setHistory({});
+        });
       }
     }
   }, [initialPrompt]);
@@ -388,46 +400,125 @@ const ChatPanel: React.FC<ChatPanelProps & ExtraProps> = ({
     }
   }, [followOnPrompt]);
 
+  const setCookie = (name: string, value: string, days: number = 30) => {
+    const date = new Date();
+    date.setTime(date.getTime() + days * 24 * 60 * 60 * 1000);
+    const expires = `; expires=${date.toUTCString()}`;
+    const sameSite = "; SameSite=Lax"; // Add SameSite attribute for security
+    const secure = window.location.protocol === "https:" ? "; Secure" : "";
+    document.cookie = `${name}=${value}${expires}; path=/${sameSite}${secure}`;
+  };
+
+  const getCookie = (name: string): string | undefined => {
+    const value = `; ${document.cookie}`;
+    const parts = value.split(`; ${name}=`);
+    if (parts.length === 2) {
+      return parts.pop()?.split(";").shift();
+    }
+    return undefined;
+  };
+
+  useEffect(() => {
+    console.log("currentCustomer effect", currentCustomer);
+
+    // Helper to check if a value is empty
+    const isEmpty = (value: string | undefined | null): boolean => {
+      return !value || value.trim() === "" || value.trim() === "undefined";
+    };
+
+    // First, try to save any new values to cookies
+    let updatedValues = { ...currentCustomer };
+    let needsUpdate = false;
+
+    if (!isEmpty(currentCustomer?.customer_id)) {
+      setCookie("llmasaservice-panel-customer-id", currentCustomer.customer_id);
+    }
+
+    if (
+      !isEmpty(currentCustomer?.customer_user_email) &&
+      isEmailAddress(currentCustomer.customer_user_email ?? "")
+    ) {
+      setCookie(
+        "llmasaservice-panel-customer-user-email",
+        currentCustomer?.customer_user_email ?? ""
+      );
+      setEmailInput(currentCustomer.customer_user_email ?? "");
+      setEmailInputSet(true);
+      setEmailValid(true);
+    }
+
+    // Then, check for any missing values and try to get them from cookies
+    if (isEmpty(currentCustomer?.customer_id)) {
+      const cookieId = getCookie("llmasaservice-panel-customer-id");
+      if (!isEmpty(cookieId)) {
+        updatedValues.customer_id = cookieId ?? "";
+        needsUpdate = true;
+      }
+    }
+
+    if (isEmpty(currentCustomer?.customer_user_email)) {
+      const cookieEmail = getCookie("llmasaservice-panel-customer-user-email");
+      if (!isEmpty(cookieEmail) && isEmailAddress(cookieEmail ?? "")) {
+        updatedValues.customer_user_email = cookieEmail;
+        needsUpdate = true;
+      }
+    }
+
+    // Only update currentCustomer if we found values in cookies
+    if (needsUpdate) {
+      setCurrentCustomer(updatedValues);
+    }
+  }, [currentCustomer]);
+  const ensureConversation = () => {
+    if (
+      (!currentConversation || currentConversation === "") &&
+      createConversationOnFirstChat
+    ) {
+      return fetch(`${publicAPIUrl}/conversations`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          project_id: project_id ?? "",
+          agentId: agent,
+          customerId: currentCustomer?.customer_id ?? null,
+          customerEmail: currentCustomer?.customer_user_email ?? null,
+        }),
+      })
+        .then(async (res) => {
+          if (!res.ok) {
+            const errorText = await res.text();
+            throw new Error(
+              `HTTP error! status: ${res.status}, message: ${errorText}`
+            );
+          }
+          return res.json();
+        })
+        .then((newConvo) => {
+          if (newConvo?.id) {
+            console.log("new conversation created", newConvo.id);
+            setCurrentConversation(newConvo.id);
+            return newConvo.id;
+          }
+          return "";
+        })
+        .catch((error) => {
+          console.error("Error creating new conversation", error);
+          return "";
+        });
+    }
+    // If a currentConversation exists, return it in a resolved Promise.
+    return Promise.resolve(currentConversation);
+  };
+
   const continueChat = (suggestion?: string) => {
     console.log("continueChat", suggestion);
 
-    const ensureConversation = () => {
-      if (
-        (!currentConversation || currentConversation === "") &&
-        createConversationOnFirstChat
-      ) {
-        return fetch(`${publicAPIUrl}/conversations`, {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify({
-            project_id: project_id ?? "",
-            agentId: agent,
-            customerId: customer?.customer_id ?? null,
-            customerEmail: customer?.customer_name ?? null,
-          }),
-        })
-          .then((res) => res.json())
-          .then((newConvo) => {
-            if (newConvo?.id) {
-              console.log("new conversation created", newConvo.id);
-              setCurrentConversation(newConvo.id);
-              return newConvo.id;
-            }
-            return "";
-          })
-          .catch((error) => {
-            console.error("Error creating new conversation", error);
-            return "";
-          });
-      }
-      // If a currentConversation exists, return it in a resolved Promise.
-      return Promise.resolve(currentConversation);
-    };
-
     // wait till new conversation created....
     ensureConversation().then((convId) => {
+      console.log("current customer", currentCustomer);
+
       if (!idle) {
         stop(lastController);
 
@@ -558,6 +649,7 @@ const ChatPanel: React.FC<ChatPanelProps & ExtraProps> = ({
 
   function copyToClipboard(text: string) {
     navigator.clipboard.writeText(text);
+    interactionClicked(lastCallId, "copy");
   }
 
   const scrollToBottom = () => {
@@ -749,6 +841,7 @@ const ChatPanel: React.FC<ChatPanelProps & ExtraProps> = ({
 
   const handleSuggestionClick = (suggestion: string) => {
     continueChat(suggestion);
+    interactionClicked(lastCallId, "suggestion");
   };
 
   const sendConversationsViaEmail = (
@@ -767,11 +860,13 @@ const ChatPanel: React.FC<ChatPanelProps & ExtraProps> = ({
         subject: subject,
         html: convertHistoryToHTML(history),
         project_id: project_id ?? "",
-        customer: customer,
+        customer: currentCustomer,
         history: history,
         title: title,
       }),
     });
+
+    interactionClicked(lastCallId, "email", from);
   };
 
   const sendCallToActionEmail = async (from: string) => {
@@ -786,42 +881,50 @@ const ChatPanel: React.FC<ChatPanelProps & ExtraProps> = ({
         subject: `${callToActionEmailSubject} from ${from}`,
         html: convertHistoryToHTML(history),
         project_id: project_id ?? "",
-        customer: customer,
+        customer: currentCustomer,
         history: history,
         title: title,
       }),
     });
 
-    if (r.ok) {
-      setHasSentCallToActionEmail(true);
-    }
+    interactionClicked(lastCallId, "cta", from);
+
+    setCallToActionSent(true);
   };
 
-  const defaultThumbsUpClick = (callId: string) => {
-    console.log("thumbs up", callId);
-    fetch(`${publicAPIUrl}/feedback/${callId}/thumbsup`, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        comment: "",
-        project_id: project_id ?? "",
-      }),
-    });
-  };
+  const interactionClicked = async (
+    callId: string,
+    action: string,
+    emailaddress: string = "",
+    comment: string = ""
+  ) => {
+    console.log(`Interaction clicked: ${action} for callId: ${callId}`);
 
-  const defaultThumbsDownClick = (callId: string) => {
-    console.log("thumbs down", callId);
-    fetch(`${publicAPIUrl}/feedback/${callId}/thumbsdown`, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        comment: "",
-        project_id: project_id ?? "",
-      }),
+    ensureConversation().then((convId) => {
+      // special case where no call made yet, and they click on Suggestion/CTA/Email/Save
+      if (!callId || callId === "") callId = convId;
+
+      const email =
+        emailaddress && emailaddress !== ""
+          ? emailaddress
+          : isEmailAddress(currentCustomer?.customer_user_email ?? "")
+          ? currentCustomer?.customer_user_email
+          : isEmailAddress(currentCustomer?.customer_id ?? "")
+          ? currentCustomer?.customer_id
+          : "";
+
+      fetch(`${publicAPIUrl}/feedback/${callId}/${action}`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          project_id: project_id ?? "",
+          conversation_id: convId ?? "",
+          email: email,
+          comment: comment,
+        }),
+      });
     });
   };
 
@@ -846,6 +949,12 @@ const ChatPanel: React.FC<ChatPanelProps & ExtraProps> = ({
     }
 
     return prompt;
+  };
+
+  const isDisabledDueToNoEmail = () => {
+    const valid = isEmailAddress(emailInput);
+    if (valid) return false;
+    if (customerEmailCaptureMode === "required") return true;
   };
 
   return (
@@ -891,7 +1000,10 @@ const ChatPanel: React.FC<ChatPanelProps & ExtraProps> = ({
                 <div className="button-container">
                   <button
                     className="copy-button"
-                    onClick={() => copyToClipboard(response.content)}
+                    onClick={() => {
+                      copyToClipboard(response.content);
+                    }}
+                    disabled={isDisabledDueToNoEmail()}
                   >
                     <svg
                       xmlns="http://www.w3.org/2000/svg"
@@ -915,11 +1027,11 @@ const ChatPanel: React.FC<ChatPanelProps & ExtraProps> = ({
 
                   <button
                     className="thumbs-button"
-                    onClick={() =>
-                      thumbsUpClick
-                        ? thumbsUpClick(response.callId)
-                        : defaultThumbsUpClick(response.callId)
-                    }
+                    onClick={() => {
+                      if (thumbsUpClick) thumbsUpClick(response.callId);
+                      interactionClicked(response.callId, "thumbsup");
+                    }}
+                    disabled={isDisabledDueToNoEmail()}
                   >
                     <svg
                       xmlns="http://www.w3.org/2000/svg"
@@ -933,11 +1045,11 @@ const ChatPanel: React.FC<ChatPanelProps & ExtraProps> = ({
 
                   <button
                     className="thumbs-button"
-                    onClick={() =>
-                      thumbsDownClick
-                        ? thumbsDownClick(response.callId)
-                        : defaultThumbsDownClick(response.callId)
-                    }
+                    onClick={() => {
+                      if (thumbsDownClick) thumbsDownClick(response.callId);
+                      interactionClicked(response.callId, "thumbsdown");
+                    }}
+                    disabled={isDisabledDueToNoEmail()}
                   >
                     <svg
                       xmlns="http://www.w3.org/2000/svg"
@@ -960,7 +1072,7 @@ const ChatPanel: React.FC<ChatPanelProps & ExtraProps> = ({
                   key={index}
                   className="suggestion-button"
                   onClick={() => handleSuggestionClick(question)}
-                  disabled={!idle}
+                  disabled={!idle || isDisabledDueToNoEmail()}
                 >
                   {question}
                 </button>
@@ -976,16 +1088,113 @@ const ChatPanel: React.FC<ChatPanelProps & ExtraProps> = ({
             </button>
           )}
         </div>
+        {showEmailPanel && (
+          <>
+            {!emailValid && (
+              <div className="email-input-message">
+                {isDisabledDueToNoEmail()
+                  ? "Let's get started - please enter your email"
+                  : CTAClickedButNoEmail || emailClickedButNoEmail
+                  ? "Sure, we just need an email address to contact you"
+                  : "Email address is invalid"}
+              </div>
+            )}
+            <div className="email-input-container">
+              <input
+                type="email"
+                name="email"
+                id="email"
+                className={
+                  emailValid
+                    ? emailInputSet
+                      ? "email-input-set"
+                      : "email-input"
+                    : "email-input-invalid"
+                }
+                placeholder={customerEmailCapturePlaceholder}
+                value={emailInput}
+                onChange={(e) => setEmailInput(e.target.value)}
+                disabled={emailInputSet}
+              />
+              <button
+                className="email-input-button"
+                onClick={() => {
+                  // turn back to edit mode
+                  if (emailInputSet) {
+                    setEmailInputSet(false);
+                    return;
+                  }
+
+                  // Determine customer_id:
+                  // 1. If current customer_id exists and is not the old email, keep it
+                  // 2. If current customer_id matches the old email, use the new email
+                  // 3. Otherwise use the new email
+                  const newId =
+                    currentCustomer?.customer_id &&
+                    currentCustomer.customer_id !== "" &&
+                    currentCustomer.customer_id !==
+                      currentCustomer?.customer_user_email
+                      ? currentCustomer.customer_id // Keep existing ID if it's not the old email
+                      : emailInput; // Use new email as ID in all other cases
+
+                  // validate and set
+                  if (isEmailAddress(emailInput)) {
+                    setEmailInputSet((current) => !current);
+                    setEmailValid(true);
+
+                    //setting customer id / email
+                    setCurrentCustomer({
+                      customer_id: newId,
+                      customer_user_email: emailInput,
+                    });
+
+                    // if they were in the middle of a submit CTA, call that now
+                    if (CTAClickedButNoEmail) {
+                      sendCallToActionEmail(emailInput);
+                      setCTAClickedButNoEmail(false);
+                    }
+
+                    if (emailClickedButNoEmail) {
+                      handleSendEmail(emailInput, emailInput);
+                      setEmailClickedButNoEmail(false);
+                    }
+                  } else {
+                    if (customerEmailCaptureMode === "required") {
+                      setEmailValid(false);
+                    } else {
+                      if (emailInput === "") {
+                        // special case, blanking email if optional or hidden
+                        setEmailInputSet(false);
+                        setEmailValid(true);
+                        setCurrentCustomer({
+                          customer_id: newId,
+                          customer_user_email: emailInput,
+                        });
+                      } else {
+                        // they tried to enter an optional email, but it was invalid
+                        setEmailValid(false);
+                      }
+                    }
+                  }
+                }}
+              >
+                {emailInputSet ? "✎" : "set"}
+              </button>
+            </div>
+          </>
+        )}
         <div className="button-container-actions">
           {showSaveButton && (
             <button
               className="save-button"
-              onClick={() =>
+              onClick={() => {
                 saveHTMLToFile(
                   convertHistoryToHTML(history),
                   `conversation-${new Date().toISOString()}.html`
-                )
-              }
+                );
+                interactionClicked(lastCallId, "save");
+              }}
+              disabled={isDisabledDueToNoEmail()}
             >
               Save Conversation
             </button>
@@ -993,34 +1202,51 @@ const ChatPanel: React.FC<ChatPanelProps & ExtraProps> = ({
           {showEmailButton && (
             <button
               className="save-button"
-              onClick={() => setIsEmailModalOpen(true)}
+              onClick={() => {
+                if (isEmailAddress(emailInput)) {
+                  setEmailInputSet(true);
+                  setEmailValid(true);
+                  handleSendEmail(emailInput, emailInput);
+                  setEmailClickedButNoEmail(false);
+                } else {
+                  setShowEmailPanel(true);
+                  setEmailValid(false);
+                  setEmailClickedButNoEmail(true);
+                }
+              }}
+              disabled={isDisabledDueToNoEmail()}
             >
-              Email Conversation
+              {"Email Conversation" + (emailSent ? " ✓" : "")}
             </button>
           )}
 
-          {showCallToAction && callToActionEmailAddress && (
+          {showCallToAction && (
             <button
               className="save-button"
-              onClick={() => setIsCallToActionModalOpen(true)}
+              onClick={() => {
+                if (isEmailAddress(emailInput)) {
+                  setEmailInputSet(true);
+                  setEmailValid(true);
+                  sendCallToActionEmail(emailInput);
+                  setCTAClickedButNoEmail(false);
+                } else {
+                  setShowEmailPanel(true);
+                  setEmailValid(false);
+                  setCTAClickedButNoEmail(true);
+                }
+              }}
+              disabled={isDisabledDueToNoEmail()}
             >
-              {callToActionButtonText}
+              {callToActionButtonText + (callToActionSent ? " ✓" : "")}
             </button>
           )}
         </div>
 
         <EmailModal
           isOpen={isEmailModalOpen}
-          defaultEmail={customer.customer_user_email}
+          defaultEmail={emailInput ?? ""}
           onClose={() => setIsEmailModalOpen(false)}
           onSend={handleSendEmail}
-        />
-
-        <CallToActionlModal
-          isOpen={isCallToActionModalOpen}
-          defaultEmail={customer.customer_user_email}
-          onClose={() => setIsCallToActionModalOpen(false)}
-          onSend={sendCallToActionEmail}
         />
 
         <div className="input-container">
@@ -1037,8 +1263,13 @@ const ChatPanel: React.FC<ChatPanelProps & ExtraProps> = ({
                 }
               }
             }}
+            disabled={isDisabledDueToNoEmail()}
           ></textarea>
-          <button className="send-button" onClick={() => continueChat()}>
+          <button
+            className="send-button"
+            onClick={() => continueChat()}
+            disabled={isDisabledDueToNoEmail()}
+          >
             {idle ? (
               <svg
                 xmlns="http://www.w3.org/2000/svg"
