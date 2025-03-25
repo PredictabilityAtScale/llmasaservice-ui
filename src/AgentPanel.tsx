@@ -59,6 +59,8 @@ export interface AgentPanelProps {
   initialHistory?: { [key: string]: { content: string; callId: string } };
   hideRagContextInPrompt?: boolean;
   createConversationOnFirstChat?: boolean;
+  customerEmailCaptureMode?: "HIDE" | "OPTIONAL" | "REQUIRED";
+  customerEmailCapturePlaceholder?: string;
 }
 interface ExtraProps extends React.HTMLAttributes<HTMLElement> {
   inline?: boolean;
@@ -104,7 +106,6 @@ const AgentPanel: React.FC<AgentPanelProps & ExtraProps> = ({
   //ragRankLimit = 5,
   initialHistory = {},
   hideRagContextInPrompt = true,
-  createConversationOnFirstChat = true,
 }) => {
   const [followOnPrompt, setFollowOnPrompt] = useState<string>("");
 
@@ -240,7 +241,9 @@ const AgentPanel: React.FC<AgentPanelProps & ExtraProps> = ({
           conversation={conversation}
           initialHistory={initialHistory}
           hideRagContextInPrompt={hideRagContextInPrompt}
-          createConversationOnFirstChat={createConversationOnFirstChat}
+          createConversationOnFirstChat={agentData?.createConversationOnFirstChat ?? true}
+          customerEmailCaptureMode={agentData?.customerEmailCaptureMode ?? "HIDE"}
+          customerEmailCapturePlaceholder={agentData?.customerEmailCapturePlaceholder ?? "Please enter your email..."}
         />
       )}
     </>

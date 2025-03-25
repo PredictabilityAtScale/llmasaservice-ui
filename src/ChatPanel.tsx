@@ -66,7 +66,7 @@ export interface ChatPanelProps {
   };
   hideRagContextInPrompt?: boolean;
   createConversationOnFirstChat?: boolean;
-  customerEmailCaptureMode?: "hide" | "optional" | "required";
+  customerEmailCaptureMode?: "HIDE" | "OPTIONAL" | "REQUIRED";
   customerEmailCapturePlaceholder?: string;
 }
 
@@ -114,7 +114,7 @@ const ChatPanel: React.FC<ChatPanelProps & ExtraProps> = ({
   initialHistory = {},
   hideRagContextInPrompt = true,
   createConversationOnFirstChat = true,
-  customerEmailCaptureMode = "hide",
+  customerEmailCaptureMode = "HIDE",
   customerEmailCapturePlaceholder = "Please enter your email...",
 }) => {
   const isEmailAddress = (email: string): boolean => {
@@ -147,7 +147,7 @@ const ChatPanel: React.FC<ChatPanelProps & ExtraProps> = ({
   );
   const [emailValid, setEmailValid] = useState(true);
   const [showEmailPanel, setShowEmailPanel] = useState(
-    customerEmailCaptureMode !== "hide"
+    customerEmailCaptureMode !== "HIDE"
   );
   const [callToActionSent, setCallToActionSent] = useState(false);
   const [CTAClickedButNoEmail, setCTAClickedButNoEmail] = useState(false);
@@ -184,9 +184,9 @@ const ChatPanel: React.FC<ChatPanelProps & ExtraProps> = ({
   }
 
   useEffect(() => {
-    setShowEmailPanel(customerEmailCaptureMode !== "hide");
+    setShowEmailPanel(customerEmailCaptureMode !== "HIDE");
 
-    if (customerEmailCaptureMode === "required") {
+    if (customerEmailCaptureMode === "REQUIRED") {
       if (!isEmailAddress(emailInput)) {
         setEmailValid(false);
       }
@@ -418,6 +418,49 @@ const ChatPanel: React.FC<ChatPanelProps & ExtraProps> = ({
     return undefined;
   };
 
+  const ensureConversation = () => {
+    if (
+      (!currentConversation || currentConversation === "") &&
+      createConversationOnFirstChat
+    ) {
+      return fetch(`${publicAPIUrl}/conversations`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          project_id: project_id ?? "",
+          agentId: agent,
+          customerId: currentCustomer?.customer_id ?? null,
+          customerEmail: currentCustomer?.customer_user_email ?? null,
+        }),
+      })
+        .then(async (res) => {
+          if (!res.ok) {
+            const errorText = await res.text();
+            throw new Error(
+              `HTTP error! status: ${res.status}, message: ${errorText}`
+            );
+          }
+          return res.json();
+        })
+        .then((newConvo) => {
+          if (newConvo?.id) {
+            console.log("new conversation created", newConvo.id);
+            setCurrentConversation(newConvo.id);
+            return newConvo.id;
+          }
+          return "";
+        })
+        .catch((error) => {
+          console.error("Error creating new conversation", error);
+          return "";
+        });
+    }
+    // If a currentConversation exists, return it in a resolved Promise.
+    return Promise.resolve(currentConversation);
+  };
+
   useEffect(() => {
     console.log("currentCustomer effect", currentCustomer);
 
@@ -464,53 +507,33 @@ const ChatPanel: React.FC<ChatPanelProps & ExtraProps> = ({
       }
     }
 
-    // Only update currentCustomer if we found values in cookies
     if (needsUpdate) {
+      // update the customer id and email in the conversation
+      ensureConversation().then((convId) => {
+        if (convId && convId !== "") {
+          console.log(
+            "updating conversation with customer id and email",
+            convId,
+            currentCustomer
+          );
+
+          const r = fetch(`${publicAPIUrl}/conversations/${convId}`, {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+            },
+            body: JSON.stringify({
+              project_id: project_id ?? "",
+              customerId: updatedValues.customer_id,
+              customerEmail: updatedValues.customer_user_email,
+            }),
+          });
+        }
+      });
+
       setCurrentCustomer(updatedValues);
     }
   }, [currentCustomer]);
-  const ensureConversation = () => {
-    if (
-      (!currentConversation || currentConversation === "") &&
-      createConversationOnFirstChat
-    ) {
-      return fetch(`${publicAPIUrl}/conversations`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          project_id: project_id ?? "",
-          agentId: agent,
-          customerId: currentCustomer?.customer_id ?? null,
-          customerEmail: currentCustomer?.customer_user_email ?? null,
-        }),
-      })
-        .then(async (res) => {
-          if (!res.ok) {
-            const errorText = await res.text();
-            throw new Error(
-              `HTTP error! status: ${res.status}, message: ${errorText}`
-            );
-          }
-          return res.json();
-        })
-        .then((newConvo) => {
-          if (newConvo?.id) {
-            console.log("new conversation created", newConvo.id);
-            setCurrentConversation(newConvo.id);
-            return newConvo.id;
-          }
-          return "";
-        })
-        .catch((error) => {
-          console.error("Error creating new conversation", error);
-          return "";
-        });
-    }
-    // If a currentConversation exists, return it in a resolved Promise.
-    return Promise.resolve(currentConversation);
-  };
 
   const continueChat = (suggestion?: string) => {
     console.log("continueChat", suggestion);
@@ -954,7 +977,7 @@ const ChatPanel: React.FC<ChatPanelProps & ExtraProps> = ({
   const isDisabledDueToNoEmail = () => {
     const valid = isEmailAddress(emailInput);
     if (valid) return false;
-    if (customerEmailCaptureMode === "required") return true;
+    if (customerEmailCaptureMode === "REQUIRED") return true;
   };
 
   return (
@@ -1159,7 +1182,7 @@ const ChatPanel: React.FC<ChatPanelProps & ExtraProps> = ({
                       setEmailClickedButNoEmail(false);
                     }
                   } else {
-                    if (customerEmailCaptureMode === "required") {
+                    if (customerEmailCaptureMode === "REQUIRED") {
                       setEmailValid(false);
                     } else {
                       if (emailInput === "") {
