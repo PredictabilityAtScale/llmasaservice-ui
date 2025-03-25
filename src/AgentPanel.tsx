@@ -18,7 +18,7 @@ export interface AgentPanelProps {
   thumbsUpClick?: (callId: string) => void;
   thumbsDownClick?: (callId: string) => void;
   theme?: "light" | "dark";
-  //markdownClass?: string;
+  markdownClass?: string;
   width?: string;
   height?: string;
   url?: string;
@@ -78,7 +78,7 @@ const AgentPanel: React.FC<AgentPanelProps & ExtraProps> = ({
   thumbsUpClick,
   thumbsDownClick,
   theme,
-  //markdownClass = null,
+  markdownClass = null,
   width,
   height,
   url = "https://chat.llmasaservice.io/",
@@ -178,6 +178,7 @@ const AgentPanel: React.FC<AgentPanelProps & ExtraProps> = ({
               ? "light"
               : "dark"
           }
+          markdownClass={markdownClass ?? undefined}
           cssUrl={agentData?.cssUrl ?? ""}
           height={height ? height : agentData?.displayHeight ?? "100vh"}
           width={width ? width : agentData?.displayWidth ?? "100%"}
