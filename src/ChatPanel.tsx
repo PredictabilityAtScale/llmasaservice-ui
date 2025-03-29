@@ -342,19 +342,47 @@ const ChatPanel: React.FC<ChatPanelProps & ExtraProps> = ({
           send(
             initialPrompt,
             messages,
-            [...data, 
-              { key: "--customer_id", data: currentCustomer?.customer_id ?? "" },
-              { key: "--customer_name", data: currentCustomer?.customer_name ?? "" },
-              { key: "--customer_user_id", data: currentCustomer?.customer_user_id ?? "" },
-              { key: "--customer_user_email", data: currentCustomer?.customer_user_email ?? "" },
+            [
+              ...data,
+              {
+                key: "--customer_id",
+                data: currentCustomer?.customer_id ?? "",
+              },
+              {
+                key: "--customer_name",
+                data: currentCustomer?.customer_name ?? "",
+              },
+              {
+                key: "--customer_user_id",
+                data: currentCustomer?.customer_user_id ?? "",
+              },
+              {
+                key: "--customer_user_email",
+                data: currentCustomer?.customer_user_email ?? "",
+              },
               { key: "--email", data: emailInput ?? "" },
               { key: "--emailValid", data: emailValid ? "true" : "false" },
-              { key: "--emailInputSet", data: emailInputSet ? "true" : "false" },
-              { key: "--emailPanelShowing", data: showEmailPanel ? "true" : "false" },
-              { key: "--callToActionSent", data: callToActionSent ? "true" : "false" },
-              { key: "--CTAClickedButNoEmail", data: CTAClickedButNoEmail ? "true" : "false" },
+              {
+                key: "--emailInputSet",
+                data: emailInputSet ? "true" : "false",
+              },
+              {
+                key: "--emailPanelShowing",
+                data: showEmailPanel ? "true" : "false",
+              },
+              {
+                key: "--callToActionSent",
+                data: callToActionSent ? "true" : "false",
+              },
+              {
+                key: "--CTAClickedButNoEmail",
+                data: CTAClickedButNoEmail ? "true" : "false",
+              },
               { key: "--emailSent", data: emailSent ? "true" : "false" },
-              { key: "--emailClickedButNoEmail", data: emailClickedButNoEmail ? "true" : "false" },
+              {
+                key: "--emailClickedButNoEmail",
+                data: emailClickedButNoEmail ? "true" : "false",
+              },
               { key: "--messages", data: messages.length.toString() },
             ],
             true,
@@ -662,19 +690,41 @@ const ChatPanel: React.FC<ChatPanelProps & ExtraProps> = ({
         send(
           nextPromptToSend,
           messagesAndHistory,
-          [...data, 
+          [
+            ...data,
             { key: "--customer_id", data: currentCustomer?.customer_id ?? "" },
-            { key: "--customer_name", data: currentCustomer?.customer_name ?? "" },
-            { key: "--customer_user_id", data: currentCustomer?.customer_user_id ?? "" },
-            { key: "--customer_user_email", data: currentCustomer?.customer_user_email ?? "" },
+            {
+              key: "--customer_name",
+              data: currentCustomer?.customer_name ?? "",
+            },
+            {
+              key: "--customer_user_id",
+              data: currentCustomer?.customer_user_id ?? "",
+            },
+            {
+              key: "--customer_user_email",
+              data: currentCustomer?.customer_user_email ?? "",
+            },
             { key: "--email", data: emailInput ?? "" },
             { key: "--emailValid", data: emailValid ? "true" : "false" },
             { key: "--emailInputSet", data: emailInputSet ? "true" : "false" },
-            { key: "--emailPanelShowing", data: showEmailPanel ? "true" : "false" },
-            { key: "--callToActionSent", data: callToActionSent ? "true" : "false" },
-            { key: "--CTAClickedButNoEmail", data: CTAClickedButNoEmail ? "true" : "false" },
+            {
+              key: "--emailPanelShowing",
+              data: showEmailPanel ? "true" : "false",
+            },
+            {
+              key: "--callToActionSent",
+              data: callToActionSent ? "true" : "false",
+            },
+            {
+              key: "--CTAClickedButNoEmail",
+              data: CTAClickedButNoEmail ? "true" : "false",
+            },
             { key: "--emailSent", data: emailSent ? "true" : "false" },
-            { key: "--emailClickedButNoEmail", data: emailClickedButNoEmail ? "true" : "false" },
+            {
+              key: "--emailClickedButNoEmail",
+              data: emailClickedButNoEmail ? "true" : "false",
+            },
             { key: "--messages", data: messagesAndHistory.length.toString() },
           ],
           true,
