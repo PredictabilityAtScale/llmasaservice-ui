@@ -179,7 +179,6 @@ const ChatPanel: React.FC<ChatPanelProps & ExtraProps> = ({
     window.location.hostname === "localhost" ||
     window.location.hostname === "dev.llmasaservice.io"
   ) {
-    //publicAPIUrl = "https://duzyq4e8ql.execute-api.us-east-1.amazonaws.com/dev";
     publicAPIUrl = "https://8ftw8droff.execute-api.us-east-1.amazonaws.com/dev";
   }
 
@@ -329,6 +328,29 @@ const ChatPanel: React.FC<ChatPanelProps & ExtraProps> = ({
     return element.scrollHeight > element.clientHeight;
   }
 
+  const getBrowserInfo = () => {
+    try {
+      return {
+        currentTimeUTC: new Date().toISOString(),
+        userTimezone:
+          (typeof Intl !== "undefined" &&
+            Intl.DateTimeFormat().resolvedOptions().timeZone) ||
+          "unknown",
+        userLanguage:
+          (typeof navigator !== "undefined" &&
+            (navigator.language || navigator.language)) ||
+          "unknown",
+      };
+    } catch (e) {
+      console.warn("Error getting browser info:", e);
+      return {
+        currentTimeUTC: new Date().toISOString(),
+        userTimezone: "unknown",
+        userLanguage: "unknown",
+      };
+    }
+  };
+
   // initial prompt change. Reset the chat history and get this response
   useEffect(() => {
     if (initialPrompt && initialPrompt !== "") {
@@ -338,6 +360,8 @@ const ChatPanel: React.FC<ChatPanelProps & ExtraProps> = ({
         ensureConversation().then((convId) => {
           if (lastController) stop(lastController);
           const controller = new AbortController();
+
+          const browserInfo = getBrowserInfo();
 
           send(
             initialPrompt,
@@ -384,6 +408,9 @@ const ChatPanel: React.FC<ChatPanelProps & ExtraProps> = ({
                 data: emailClickedButNoEmail ? "true" : "false",
               },
               { key: "--messages", data: messages.length.toString() },
+              { key: "--currentTimeUTC", data: browserInfo?.currentTimeUTC },
+              { key: "--userTimezone", data: browserInfo?.userTimezone },
+              { key: "--userLanguage", data: browserInfo?.userLanguage },
             ],
             true,
             true,
@@ -465,6 +492,9 @@ const ChatPanel: React.FC<ChatPanelProps & ExtraProps> = ({
       (!currentConversation || currentConversation === "") &&
       createConversationOnFirstChat
     ) {
+
+      const browserInfo = getBrowserInfo();
+
       return fetch(`${publicAPIUrl}/conversations`, {
         method: "POST",
         headers: {
@@ -475,6 +505,8 @@ const ChatPanel: React.FC<ChatPanelProps & ExtraProps> = ({
           agentId: agent,
           customerId: currentCustomer?.customer_id ?? null,
           customerEmail: currentCustomer?.customer_user_email ?? null,
+          timezone: browserInfo?.userTimezone,
+          language: browserInfo?.userLanguage,
         }),
       })
         .then(async (res) => {
@@ -686,6 +718,8 @@ const ChatPanel: React.FC<ChatPanelProps & ExtraProps> = ({
 
         console.log("Sending for conversation", convId);
 
+        const browserInfo = getBrowserInfo();
+
         const controller = new AbortController();
         send(
           nextPromptToSend,
@@ -726,6 +760,9 @@ const ChatPanel: React.FC<ChatPanelProps & ExtraProps> = ({
               data: emailClickedButNoEmail ? "true" : "false",
             },
             { key: "--messages", data: messagesAndHistory.length.toString() },
+            { key: "--currentTimeUTC", data: browserInfo?.currentTimeUTC },
+            { key: "--userTimezone", data: browserInfo?.userTimezone },
+            { key: "--userLanguage", data: browserInfo?.userLanguage },
           ],
           true,
           true,

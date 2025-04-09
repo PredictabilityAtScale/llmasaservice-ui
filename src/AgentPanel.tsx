@@ -94,7 +94,7 @@ const AgentPanel: React.FC<AgentPanelProps & ExtraProps> = ({
   //showEmailButton = true,
   followOnQuestions = [],
   clearFollowOnQuestionsNextPrompt = false,
-  //followOnPrompt = "",
+  followOnPrompt = "",
   showPoweredBy = true,
   agent,
   conversation = null,
@@ -107,8 +107,6 @@ const AgentPanel: React.FC<AgentPanelProps & ExtraProps> = ({
   initialHistory = {},
   hideRagContextInPrompt = true,
 }) => {
-  const [followOnPrompt, setFollowOnPrompt] = useState<string>("");
-
   const searchParams = new URLSearchParams(location.search);
   //const id = searchParams.get("id") || "";
   const customer_id = searchParams.get("customer_id") || "";
