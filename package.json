@@ -1,6 +1,6 @@
 {
   "name": "llmasaservice-ui",
-  "version": "0.9.12",
+  "version": "0.10.2",
   "description": "Prebuilt UI components for LLMAsAService.io",
   "main": "dist/index.js",
   "module": "dist/index.mjs",
@@ -45,7 +45,10 @@
     "chat"
   ],
   "dependencies": {
-    "llmasaservice-client": "^0.9.2",
+    "@modelcontextprotocol/sdk": "^1.9.0",
+    "dotenv": "^16.4.7",
+    "llmasaservice-client": "^0.9.3",
+    "process": "^0.11.10",
     "react-markdown": "^9.0.1",
     "react-syntax-highlighter": "^15.5.0",
     "rehype-raw": "^7.0.0",

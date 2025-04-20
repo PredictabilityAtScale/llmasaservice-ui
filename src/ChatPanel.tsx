@@ -1,5 +1,5 @@
 import { LLMAsAServiceCustomer, useLLM } from "llmasaservice-client";
-import React, { useEffect, useRef, useState } from "react";
+import React, { useCallback, useEffect, useRef, useState } from "react";
 import ReactMarkdown from "react-markdown";
 import rehypeRaw from "rehype-raw";
 import ReactDOMServer from "react-dom/server";
@@ -10,6 +10,7 @@ import PrismStyle from "react-syntax-highlighter";
 import materialDark from "react-syntax-highlighter/dist/esm/styles/prism/material-dark.js";
 import materialLight from "react-syntax-highlighter/dist/esm/styles/prism/material-light.js";
 import EmailModal from "./EmailModal";
+import { MCPClient } from "./mcpClient";
 
 export interface ChatPanelProps {
   project_id: string;
@@ -68,10 +69,18 @@ export interface ChatPanelProps {
   createConversationOnFirstChat?: boolean;
   customerEmailCaptureMode?: "HIDE" | "OPTIONAL" | "REQUIRED";
   customerEmailCapturePlaceholder?: string;
+  mcpServers: [];
 }
 
 interface ExtraProps extends React.HTMLAttributes<HTMLElement> {
   inline?: boolean;
+}
+
+interface ToolItem {
+  name: string;
+  description: string;
+  parameters?: any;
+  input_schema?: any;
 }
 
 const ChatPanel: React.FC<ChatPanelProps & ExtraProps> = ({
@@ -116,6 +125,7 @@ const ChatPanel: React.FC<ChatPanelProps & ExtraProps> = ({
   createConversationOnFirstChat = true,
   customerEmailCaptureMode = "HIDE",
   customerEmailCapturePlaceholder = "Please enter your email...",
+  mcpServers = [],
 }) => {
   const isEmailAddress = (email: string): boolean => {
     const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
@@ -124,6 +134,7 @@ const ChatPanel: React.FC<ChatPanelProps & ExtraProps> = ({
 
   const [nextPrompt, setNextPrompt] = useState("");
   const [lastController, setLastController] = useState(new AbortController());
+  const [lastMessages, setLastMessages] = useState<any[]>([]);
   const [history, setHistory] = useState<{
     [prompt: string]: { content: string; callId: string };
   }>(initialHistory);
@@ -153,34 +164,89 @@ const ChatPanel: React.FC<ChatPanelProps & ExtraProps> = ({
   const [CTAClickedButNoEmail, setCTAClickedButNoEmail] = useState(false);
   const [emailSent, setEmailSent] = useState(false);
   const [emailClickedButNoEmail, setEmailClickedButNoEmail] = useState(false);
-
-  const handleSendEmail = (to: string, from: string) => {
-    sendConversationsViaEmail(to, `Conversation History from ${title}`, from);
-    interactionClicked(lastCallId, "email", to);
-    setEmailSent(true);
-  };
-
   const [currentCustomer, setCurrentCustomer] =
     useState<LLMAsAServiceCustomer>(customer);
-
-  const { send, response, idle, stop, lastCallId } = useLLM({
-    project_id: project_id,
-    customer: currentCustomer,
-    url: url,
-    agent: agent,
-  });
+  const [allActions, setAllActions] = useState<
+    {
+      pattern: string;
+      type?: string;
+      markdown?: string;
+      callback?: (match: string, groups: any[]) => void;
+      clickCode?: string;
+      style?: string;
+    }[]
+  >([]);
 
   const responseAreaRef = useRef(null);
 
+  // public api url for dev and production
   let publicAPIUrl = "https://api.llmasaservice.io";
-
-  // if the url is localhost or dev.llmasaservice.io, we are in development mode and we should use the dev endpoint
   if (
     window.location.hostname === "localhost" ||
     window.location.hostname === "dev.llmasaservice.io"
   ) {
     publicAPIUrl = "https://8ftw8droff.execute-api.us-east-1.amazonaws.com/dev";
   }
+
+  //-------------------------------------------------------
+  // MCP Client
+  //-------------------------------------------------------
+  const [mcpClients, setMcpClients] = useState<MCPClient[]>([]);
+  const [convertedTools, setConvertedTools] = useState<any[]>([]);
+
+  // mcp servers are passed in in the mcps prop. Create a client for each one
+  // store the clients in an array mcpClients
+  useEffect(() => {
+    const list = Array.isArray(mcpServers) ? mcpServers : [];
+    const clients = list.map(
+      (m: any) => new MCPClient(m.sseUrl, m.sseUrl, m.sseHeaders)
+    );
+    setMcpClients(clients);
+    return () => {
+      clients.forEach((c) => c.disconnect());
+    };
+  }, [mcpServers]);
+
+  // once the clients are created, connect and get the tools
+  // store the converted formatted tools in the convertedTools state
+  useEffect(() => {
+    if (mcpClients.length === 0) return;
+
+    (async () => {
+      const tools: ToolItem[] = [];
+      // Ensure each client is connected before calling listTools()
+      await Promise.all(
+        mcpClients.map(async (client) => {
+          try {
+            // If not connected, call connect() again
+            await client.connect();
+            const list = await client.listTools();
+            console.log("listTools()", list);
+            const arr = Array.isArray(list) ? list : (list as any).tools ?? [];
+            arr.forEach((t: any) =>
+              tools.push({
+                name: t.name,
+                description: t.description || `Tool: ${t.name}`,
+                parameters: t.inputSchema,
+              })
+            );
+          } catch (e) {
+            console.error("listTools() failed", e);
+          }
+        })
+      );
+
+      setConvertedTools(tools);
+    })();
+  }, [mcpClients]);
+
+  const { send, response, idle, stop, lastCallId } = useLLM({
+    project_id: project_id,
+    customer: currentCustomer,
+    url: url,
+    agent: agent,
+    tools: convertedTools as [],
+  });
 
   useEffect(() => {
     setShowEmailPanel(customerEmailCaptureMode !== "HIDE");
@@ -257,6 +323,195 @@ const ChatPanel: React.FC<ChatPanelProps & ExtraProps> = ({
     };
   }, [cssUrl]);
 
+  const toolUseCallback = useCallback(
+    async (match: string, groups: any[]) => {
+      for (const client of mcpClients) {
+        console.log("tool", groups[1]);
+        console.log("input", groups[2]);
+
+        if (client.toolExists(groups[1])) {
+          console.log("tool exists", groups[1]);
+          setIsLoading(true);
+          try {
+            let args;
+            try {
+              // First try direct parsing
+              args = JSON.parse(groups[2]);
+            } catch (e) {
+              // If that fails, try to handle escaped quotes
+              try {
+                args = JSON.parse(groups[2].replace(/\\"/g, '"'));
+              } catch (err) {
+                console.error("Failed to parse tool arguments:", err);
+                console.log("Raw argument string:", groups[2]);
+                throw new Error("Could not parse tool arguments");
+              }
+            }
+
+            const result = await client.callTool(groups[1], args);
+
+            if (
+              result &&
+              result.content &&
+              (result as any).content?.length > 0
+            ) {
+              const textResult = (result as any).content[0]?.text;
+
+              const messagesAndHistory = lastMessages;
+
+              messagesAndHistory.push({
+                role: "user",
+                content: [
+                  {
+                    type: "text",
+                    text: lastPrompt ?? "",
+                  },
+                ],
+              });
+
+              // openAI format
+              messagesAndHistory.push({
+                role: "assistant",
+                content: [],
+                tool_calls: [JSON.parse(match)],
+              });
+
+              messagesAndHistory.push({
+                role: "tool",
+                content: [
+                  {
+                    type: "text",
+                    text: textResult,
+                  },
+                ],
+                tool_call_id: groups[0],
+              });
+
+              const browserInfo = getBrowserInfo();
+              send(
+                "",
+                messagesAndHistory,
+                [
+                  ...data,
+                  {
+                    key: "--customer_id",
+                    data: currentCustomer?.customer_id ?? "",
+                  },
+                  {
+                    key: "--customer_name",
+                    data: currentCustomer?.customer_name ?? "",
+                  },
+                  {
+                    key: "--customer_user_id",
+                    data: currentCustomer?.customer_user_id ?? "",
+                  },
+                  {
+                    key: "--customer_user_email",
+                    data: currentCustomer?.customer_user_email ?? "",
+                  },
+                  { key: "--email", data: emailInput ?? "" },
+                  { key: "--emailValid", data: emailValid ? "true" : "false" },
+                  {
+                    key: "--emailInputSet",
+                    data: emailInputSet ? "true" : "false",
+                  },
+                  {
+                    key: "--emailPanelShowing",
+                    data: showEmailPanel ? "true" : "false",
+                  },
+                  {
+                    key: "--callToActionSent",
+                    data: callToActionSent ? "true" : "false",
+                  },
+                  {
+                    key: "--CTAClickedButNoEmail",
+                    data: CTAClickedButNoEmail ? "true" : "false",
+                  },
+                  { key: "--emailSent", data: emailSent ? "true" : "false" },
+                  {
+                    key: "--emailClickedButNoEmail",
+                    data: emailClickedButNoEmail ? "true" : "false",
+                  },
+                  {
+                    key: "--messages",
+                    data: messagesAndHistory.length.toString(),
+                  },
+                  {
+                    key: "--currentTimeUTC",
+                    data: browserInfo?.currentTimeUTC,
+                  },
+                  { key: "--userTimezone", data: browserInfo?.userTimezone },
+                  { key: "--userLanguage", data: browserInfo?.userLanguage },
+                ],
+                true,
+                true,
+                service && service !== "" ? service : groups[3], // call the same service that asked for the tool_use
+                currentConversation,
+                lastController
+              );
+            } else {
+              console.error("No content in result", result);
+            }
+          } catch (error) {
+            console.error("Error calling tool:", error);
+          }
+        }
+      }
+    },
+    [
+      mcpClients,
+      lastPrompt,
+      lastMessages,
+      lastController,
+      data,
+      service,
+      currentConversation,
+    ]
+  ); // This ensures the callback gets recreated when things change
+
+  // add our MCP tool use action to the list of actions
+  useEffect(() => {
+    /* regexs need to be double escaped in js
+    group 0: full match
+    group 1: id
+    group 2: name
+    group 3: input
+    group 4: service
+    */
+
+    const anthropic_toolAction = {
+      pattern:
+        '\\{"type":"tool_use","id":"([^"]+)","name":"([^"]+)","input":(\\{[^}]+\\}),"service":"([^"]+)"\\}',
+      type: "button",
+      markdown: "Approve Tool Use: $2",
+      callback: toolUseCallback,
+    };
+
+    const openAI_toolAction = {
+      pattern:
+        '\\{"id":"([^"]+)","type":"function","function":\\{"name":"([^"]+)","arguments":"((?:\\\\.|[^"\\\\])*)"\\},"service":"([^"]+)"\\}',
+      type: "button",
+      markdown: "Approve Tool Use: $2",
+      callback: toolUseCallback,
+    };
+
+    // google doesn't return an id, so we just grab functioCall
+    const google_toolAction = {
+      pattern:
+        '^\\{\\s*"(functionCall)"\\s*:\\s*\\{\\s*"name"\\s*:\\s*"([^"]+)"\\s*,\\s*"args"\\s*:\\s*(\\{[^}]+\\})\\s*\\}\\s*,\\s*"service"\\s*:\\s*"([^"]+)"\\s*\\}$',
+      type: "button",
+      markdown: "Approve Tool Use: $2",
+      callback: toolUseCallback,
+    };
+
+    setAllActions([
+      ...actions,
+      anthropic_toolAction,
+      openAI_toolAction,
+      google_toolAction,
+    ]);
+  }, [actions, toolUseCallback]);
+
   // response change. Update the history
   useEffect(() => {
     if (response && response.length > 0) {
@@ -265,8 +520,8 @@ const ChatPanel: React.FC<ChatPanelProps & ExtraProps> = ({
       let newResponse = response;
 
       // replace actions with links
-      if (actions && actions.length > 0) {
-        actions.forEach((action, index) => {
+      if (allActions && allActions.length > 0) {
+        allActions.forEach((action, index) => {
           const regex = new RegExp(action.pattern, "gmi");
           newResponse = newResponse.replace(regex, (match, ...groups) => {
             console.log("action match", match, groups);
@@ -276,7 +531,7 @@ const ChatPanel: React.FC<ChatPanelProps & ExtraProps> = ({
 
             let html = match;
             if (action.type === "button" || action.type === "callback") {
-              html = ` <button id="${buttonId}"  ${
+              html = `<br /> <button id="${buttonId}"  ${
                 action.style ? 'class=" ' + action.style + '"' : ""
               }>${action.markdown ?? match}</button>`;
             } else if (action.type === "markdown" || action.type === "html") {
@@ -419,6 +674,7 @@ const ChatPanel: React.FC<ChatPanelProps & ExtraProps> = ({
             controller
           );
           setLastPrompt(initialPrompt);
+          setLastMessages(messages);
           setLastKey(initialPrompt);
           setLastController(controller);
           setHistory({});
@@ -492,7 +748,6 @@ const ChatPanel: React.FC<ChatPanelProps & ExtraProps> = ({
       (!currentConversation || currentConversation === "") &&
       createConversationOnFirstChat
     ) {
-
       const browserInfo = getBrowserInfo();
 
       return fetch(`${publicAPIUrl}/conversations`, {
@@ -772,6 +1027,7 @@ const ChatPanel: React.FC<ChatPanelProps & ExtraProps> = ({
         );
 
         setLastPrompt(nextPromptToSend);
+        setLastMessages(messagesAndHistory);
         setLastKey(promptKey);
         setLastController(controller);
         setNextPrompt("");
@@ -881,6 +1137,9 @@ const ChatPanel: React.FC<ChatPanelProps & ExtraProps> = ({
     return html;
   };
 
+  //-------------------------------------------------------
+  // click event handlers and helpers
+  //-------------------------------------------------------
   const convertHistoryToHTML = (history: {
     [prompt: string]: { callId: string; content: string };
   }): string => {
@@ -975,6 +1234,12 @@ const ChatPanel: React.FC<ChatPanelProps & ExtraProps> = ({
       subject
     )}&body=${encodeURIComponent(html)}`;
     window.location.href = mailtoLink;
+  };
+
+  const handleSendEmail = (to: string, from: string) => {
+    sendConversationsViaEmail(to, `Conversation History from ${title}`, from);
+    interactionClicked(lastCallId, "email", to);
+    setEmailSent(true);
   };
 
   const handleSuggestionClick = (suggestion: string) => {
@@ -1125,7 +1390,7 @@ const ChatPanel: React.FC<ChatPanelProps & ExtraProps> = ({
 
               <div className="response">
                 {index === Object.keys(history).length - 1 && isLoading ? (
-                  <div className="loading-text">loading...</div>
+                  <div className="loading-text">thinking...</div>
                 ) : null}
                 <ReactMarkdown
                   className={markdownClass}

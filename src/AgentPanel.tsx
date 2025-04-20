@@ -81,7 +81,8 @@ const AgentPanel: React.FC<AgentPanelProps & ExtraProps> = ({
   markdownClass = null,
   width,
   height,
-  url = "https://chat.llmasaservice.io/",
+  url = "https://chat.llmasaservice.io",
+  //url = "https://chat.llmasaservice.io/dev",
   //scrollToEnd = false,
   //initialMessage = "",
   prismStyle = null,
@@ -108,29 +109,42 @@ const AgentPanel: React.FC<AgentPanelProps & ExtraProps> = ({
   hideRagContextInPrompt = true,
 }) => {
   const searchParams = new URLSearchParams(location.search);
-  //const id = searchParams.get("id") || "";
   const customer_id = searchParams.get("customer_id") || "";
   const customer_email = searchParams.get("customer_email") || "";
   const [agentData, setAgentData] = useState<any>(null);
+  const [mcpData, setMCPData] = useState<any>(null);
 
   useEffect(() => {
     const fetchAgentData = async () => {
       try {
-        const response = await fetch(
-          url.endsWith("dev")
-            ? `https://8ftw8droff.execute-api.us-east-1.amazonaws.com/dev/agents/${agent}`
-            : `https://api.llmasaservice.io/agents/${agent}`,
-          {
-            method: "GET",
-            headers: {
-              "Content-Type": "application/json",
-            },
-          }
-        );
+        const fetchUrl = url.endsWith("dev")
+          ? `https://8ftw8droff.execute-api.us-east-1.amazonaws.com/dev/agents/${agent}`
+          : `https://api.llmasaservice.io/agents/${agent}`;
+
+        const response = await fetch(fetchUrl, {
+          method: "GET",
+          headers: {
+            "Content-Type": "application/json",
+          },
+        });
 
         const data = await response.json();
         if (data && data.length > 0) {
           setAgentData(data[0]);
+
+          // get MCP servers
+          const response = await fetch(fetchUrl + "/mcp", {
+            method: "GET",
+            headers: {
+              "Content-Type": "application/json",
+            },
+          });
+
+          const mcpData = await response.json();
+          if (mcpData && mcpData.length > 0) {
+            console.log("MCP servers", mcpData);
+            setMCPData(mcpData);
+          }
         }
       } catch (error) {
         console.error("Error fetching agent data:", error);
@@ -138,13 +152,9 @@ const AgentPanel: React.FC<AgentPanelProps & ExtraProps> = ({
     };
 
     if (agent && agent !== "") {
-      //console.log("fetching agent data", agent);
       fetchAgentData();
     }
-  }, [agent]);
-
-  // url = "https://chat.llmasaservice.io/";
-  // url = "https://chat.llmasaservice.io/dev";
+  }, [agent, url]);
 
   const getActionsArraySafely = (actionsString: string) => {
     let actions: any[] = [];
@@ -240,9 +250,17 @@ const AgentPanel: React.FC<AgentPanelProps & ExtraProps> = ({
           conversation={conversation}
           initialHistory={initialHistory}
           hideRagContextInPrompt={hideRagContextInPrompt}
-          createConversationOnFirstChat={agentData?.createConversationOnFirstChat ?? true}
-          customerEmailCaptureMode={agentData?.customerEmailCaptureMode ?? "HIDE"}
-          customerEmailCapturePlaceholder={agentData?.customerEmailCapturePlaceholder ?? "Please enter your email..."}
+          createConversationOnFirstChat={
+            agentData?.createConversationOnFirstChat ?? true
+          }
+          customerEmailCaptureMode={
+            agentData?.customerEmailCaptureMode ?? "HIDE"
+          }
+          customerEmailCapturePlaceholder={
+            agentData?.customerEmailCapturePlaceholder ??
+            "Please enter your email..."
+          }
+          mcpServers={mcpData}
         />
       )}
     </>
