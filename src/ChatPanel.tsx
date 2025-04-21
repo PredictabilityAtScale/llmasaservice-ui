@@ -183,18 +183,6 @@ const ChatPanel: React.FC<ChatPanelProps & ExtraProps> = ({
     }[]
   >([]);
 
-  const [responseContextMap, setResponseContextMap] = useState<
-    Map<
-      string,
-      {
-        prompt: string;
-        messages: any[];
-      }
-    >
-  >(new Map());
-
-
-
   const [followOnQuestionsState, setFollowOnQuestionsState] =
     useState(followOnQuestions);
 
@@ -445,30 +433,50 @@ const ChatPanel: React.FC<ChatPanelProps & ExtraProps> = ({
     };
   }, [cssUrl]);
 
+  // 1. Add refs to track current values
+  const lastKeyRef = useRef(lastKey);
+  const lastMessagesRef = useRef(lastMessages);
+  const mcpClientsRef = useRef(mcpClients);
+  const sendRef = useRef(send);
+  const conversationRef = useRef(currentConversation);
+  const lastControllerRef = useRef(lastController);
+  const dataWithExtrasRef = useRef(dataWithExtras);
+
+  // 2. Keep refs updated with their respective state values
+  useEffect(() => {
+    lastKeyRef.current = lastKey;
+  }, [lastKey]);
+  useEffect(() => {
+    lastMessagesRef.current = lastMessages;
+  }, [lastMessages]);
+  useEffect(() => {
+    mcpClientsRef.current = mcpClients;
+  }, [mcpClients]);
+  useEffect(() => {
+    sendRef.current = send;
+  }, [send]);
+  useEffect(() => {
+    conversationRef.current = currentConversation;
+  }, [currentConversation]);
+  useEffect(() => {
+    lastControllerRef.current = lastController;
+  }, [lastController]);
+  useEffect(() => {
+    dataWithExtrasRef.current = dataWithExtras;
+  }, [dataWithExtras]);
+
   const toolUseCallback = useCallback(
-    async (
-      match: string,
-      groups: any[],
-      contextPrompt?: string | null,
-      contextMessages?: any[],
-      responseKeyOverride?: string
-    ) => {
-      console.log("toolUseCallback", match, groups);
-      console.log("mcpClients", mcpClients);
-      console.log("contextPrompt:", contextPrompt);
-      console.log(
-        "contextMessages:",
-        contextMessages ? JSON.stringify(contextMessages, null, 2) : "none"
-      );
-      console.log("lastPrompt value:", lastPrompt); // Debug the lastPrompt value
-      console.log("lastMessages value:", JSON.stringify(lastMessages, null, 2));
-
-      // Use context parameters if provided, fall back to component state
-      const currentLastMessages = contextMessages || [...lastMessages];
-      const currentPrompt = contextPrompt || lastPrompt || initialPrompt || "";
+    async (match: string, groups: any[]) => {
       const serviceToUse = service && service !== "" ? service : groups[3];
+      const currentLastKey = lastKeyRef.current;
+      const currentLastMessages = lastMessagesRef.current;
+      const currentMcpClients = mcpClientsRef.current;
+      const currentSend = sendRef.current;
+      const refCurrentConversation = conversationRef.current;
+      const currentLastController = lastControllerRef.current;
+      const currentDataWithExtras = dataWithExtrasRef.current;
 
-      for (const client of mcpClients) {
+      for (const client of currentMcpClients) {
         if (client.toolExists(groups[1])) {
           console.log("tool exists", groups[1]);
           setIsLoading(true);
@@ -496,6 +504,7 @@ const ChatPanel: React.FC<ChatPanelProps & ExtraProps> = ({
               const textResult = (result as any).content[0]?.text;
 
               const messagesAndHistory = [...currentLastMessages];
+              const currentPrompt = currentLastKey ?? initialPrompt;
 
               if (currentPrompt) {
                 messagesAndHistory.push({
@@ -509,18 +518,9 @@ const ChatPanel: React.FC<ChatPanelProps & ExtraProps> = ({
                 });
               } else {
                 console.warn("No prompt available for tool use conversation");
-                messagesAndHistory.push({
-                  role: "user",
-                  content: [
-                    {
-                      type: "text",
-                      text: "",
-                    },
-                  ],
-                });
               }
 
-              // openAI format
+              // openAI format messages
               messagesAndHistory.push({
                 role: "assistant",
                 content: [],
@@ -543,11 +543,11 @@ const ChatPanel: React.FC<ChatPanelProps & ExtraProps> = ({
                 JSON.stringify(messagesAndHistory, null, 2)
               );
 
-              send(
+              currentSend(
                 "",
                 messagesAndHistory,
                 [
-                  ...dataWithExtras(),
+                  ...currentDataWithExtras(),
                   {
                     key: "--messages",
                     data: messagesAndHistory.length.toString(),
@@ -556,8 +556,8 @@ const ChatPanel: React.FC<ChatPanelProps & ExtraProps> = ({
                 true,
                 true,
                 serviceToUse,
-                currentConversation,
-                lastController
+                refCurrentConversation,
+                currentLastController
               );
             } else {
               console.error("No content in result", result);
@@ -568,19 +568,9 @@ const ChatPanel: React.FC<ChatPanelProps & ExtraProps> = ({
         }
       }
     },
-    [
-      mcpClients,
-      send,
-      dataWithExtras,
-      service,
-      currentConversation,
-      lastController,
-      lastPrompt,
-      lastMessages,
-      initialPrompt,
-    ]
+    [initialPrompt]
   );
-  // pre-defined action callbacks
+
   const extractValue = (
     match: string,
     groups: any[] = [],
@@ -763,15 +753,7 @@ const ChatPanel: React.FC<ChatPanelProps & ExtraProps> = ({
     return actions;
   };
 
-  // add our MCP tool use action to the list of actions
   useEffect(() => {
-    /* regexs need to be double escaped in js
-    group 0: full match
-    group 1: id
-    group 2: name
-    group 3: input
-    group 4: service
-    */
     const actionsString =
       typeof actions === "string" ? actions : JSON.stringify(actions);
     setAllActions([
@@ -784,25 +766,11 @@ const ChatPanel: React.FC<ChatPanelProps & ExtraProps> = ({
     console.log("use effect allActions", allActions);
   }, [actions]);
 
-  const responseContextMapRef = useRef(new Map());
-  // response change. Update the history
   useEffect(() => {
     if (response && response.length > 0) {
       setIsLoading(false);
 
       let newResponse = response;
-
-      // Store the context for this response
-      const responseKey = `response-${Date.now()}`;
-      setResponseContextMap((current) => {
-        const updated = new Map(current);
-        updated.set(responseKey, {
-          prompt: lastPrompt || initialPrompt || "",
-          messages: [...lastMessages],
-        });
-        responseContextMapRef.current = updated;  // Keep the ref in sync
-        return updated;
-      });
 
       if (allActions && allActions.length > 0) {
         allActions
@@ -817,19 +785,21 @@ const ChatPanel: React.FC<ChatPanelProps & ExtraProps> = ({
 
               let html = match;
               if (action.type === "button" || action.type === "callback") {
-                // Add data attributes to store context information
-                html = `<br /> <button id="${buttonId}" 
-                  data-response-key="${responseKey}"
-                  ${action.style ? 'class=" ' + action.style + '"' : ""}>
-                  ${action.markdown ?? match}
-                </button>`;
+                html = `<br /><button id="${buttonId}" ${
+                  action.style ? 'class="' + action.style + '"' : ""
+                }>
+                ${action.markdown ?? match}
+              </button>`;
               } else if (action.type === "markdown" || action.type === "html") {
                 html = action.markdown ?? "";
               }
 
-              html = html.replace(new RegExp("\\$match", "g"), match);
+              html = html.replace(new RegExp("\\$match", "gmi"), match);
               groups.forEach((group, index) => {
-                html = html.replace(new RegExp(`\\$${index + 1}`, "g"), group);
+                html = html.replace(
+                  new RegExp(`\\$${index + 1}`, "gmi"),
+                  group
+                );
               });
 
               setTimeout(() => {
@@ -838,34 +808,7 @@ const ChatPanel: React.FC<ChatPanelProps & ExtraProps> = ({
                   if (!button.onclick) {
                     // Get the context directly from the map when the button is clicked
                     button.onclick = () => {
-                      const responseKey =
-                        button.getAttribute("data-response-key");
-
-                        const contextData = responseKey ? responseContextMapRef.current.get(responseKey) : null;
-
-                      if (action.callback === toolUseCallback) {
-                        console.log(
-                          "Tool button clicked with context:",
-                          contextData
-                        );
-                        if (contextData) {
-                          // Call toolUseCallback with the stored context data
-                          toolUseCallback(
-                            match,
-                            groups.slice(0, -2),
-                            contextData.prompt,
-                            contextData.messages,
-                            responseKey ?? undefined
-                          );
-                        } else {
-                          console.warn(
-                            "No context found for response key:",
-                            responseKey
-                          );
-                          // Fallback to current state
-                          toolUseCallback(match, groups.slice(0, -2));
-                        }
-                      } else if (action.callback) {
+                      if (action.callback) {
                         action.callback(match, groups);
                       }
 
@@ -1626,7 +1569,12 @@ const ChatPanel: React.FC<ChatPanelProps & ExtraProps> = ({
 
               <div className="response">
                 {index === Object.keys(history).length - 1 && isLoading ? (
-                  <div className="loading-text">thinking...</div>
+                  <div className="loading-text">
+                    thinking&nbsp;
+                    <div className="dot"></div>
+                    <div className="dot"></div>
+                    <div className="dot"></div>
+                  </div>
                 ) : null}
                 <ReactMarkdown
                   className={markdownClass}
@@ -1703,7 +1651,6 @@ const ChatPanel: React.FC<ChatPanelProps & ExtraProps> = ({
               </div>
             </div>
           ))}
-
           {followOnQuestionsState &&
             followOnQuestionsState.length > 0 &&
             idle && (
