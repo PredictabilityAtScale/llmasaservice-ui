@@ -1,5 +1,11 @@
 import { LLMAsAServiceCustomer, useLLM } from "llmasaservice-client";
-import React, { useCallback, useEffect, useRef, useState } from "react";
+import React, {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import ReactMarkdown from "react-markdown";
 import rehypeRaw from "rehype-raw";
 import ReactDOMServer from "react-dom/server";
@@ -69,7 +75,7 @@ export interface ChatPanelProps {
   createConversationOnFirstChat?: boolean;
   customerEmailCaptureMode?: "HIDE" | "OPTIONAL" | "REQUIRED";
   customerEmailCapturePlaceholder?: string;
-  mcpServers: [];
+  mcpServers?: [];
 }
 
 interface ExtraProps extends React.HTMLAttributes<HTMLElement> {
@@ -107,7 +113,7 @@ const ChatPanel: React.FC<ChatPanelProps & ExtraProps> = ({
   historyChangedCallback = null,
   responseCompleteCallback = null,
   promptTemplate = "",
-  actions = [],
+  actions,
   showSaveButton = true,
   showEmailButton = true,
   followOnQuestions = [],
@@ -125,7 +131,7 @@ const ChatPanel: React.FC<ChatPanelProps & ExtraProps> = ({
   createConversationOnFirstChat = true,
   customerEmailCaptureMode = "HIDE",
   customerEmailCapturePlaceholder = "Please enter your email...",
-  mcpServers = [],
+  mcpServers,
 }) => {
   const isEmailAddress = (email: string): boolean => {
     const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
@@ -177,7 +183,102 @@ const ChatPanel: React.FC<ChatPanelProps & ExtraProps> = ({
     }[]
   >([]);
 
+  const [responseContextMap, setResponseContextMap] = useState<
+    Map<
+      string,
+      {
+        prompt: string;
+        messages: any[];
+      }
+    >
+  >(new Map());
+
+
+
+  const [followOnQuestionsState, setFollowOnQuestionsState] =
+    useState(followOnQuestions);
+
+  useEffect(() => {
+    if (followOnQuestions !== followOnQuestionsState) {
+      setFollowOnQuestionsState(followOnQuestions);
+    }
+  }, [followOnQuestions]);
+
+  const [iframeUrl, setIframeUrl] = useState<string | null>(null);
   const responseAreaRef = useRef(null);
+
+  const getBrowserInfo = () => {
+    try {
+      return {
+        currentTimeUTC: new Date().toISOString(),
+        userTimezone:
+          (typeof Intl !== "undefined" &&
+            Intl.DateTimeFormat().resolvedOptions().timeZone) ||
+          "unknown",
+        userLanguage:
+          (typeof navigator !== "undefined" &&
+            (navigator.language || navigator.language)) ||
+          "unknown",
+      };
+    } catch (e) {
+      console.warn("Error getting browser info:", e);
+      return {
+        currentTimeUTC: new Date().toISOString(),
+        userTimezone: "unknown",
+        userLanguage: "unknown",
+      };
+    }
+  };
+
+  const browserInfo = useMemo(() => getBrowserInfo(), []);
+
+  const dataWithExtras = () => {
+    return [
+      ...data,
+      { key: "--customer_id", data: currentCustomer?.customer_id ?? "" },
+      {
+        key: "--customer_name",
+        data: currentCustomer?.customer_name ?? "",
+      },
+      {
+        key: "--customer_user_id",
+        data: currentCustomer?.customer_user_id ?? "",
+      },
+      {
+        key: "--customer_user_email",
+        data: currentCustomer?.customer_user_email ?? "",
+      },
+      { key: "--email", data: emailInput ?? "" },
+      { key: "--emailValid", data: emailValid ? "true" : "false" },
+      {
+        key: "--emailInputSet",
+        data: emailInputSet ? "true" : "false",
+      },
+      {
+        key: "--emailPanelShowing",
+        data: showEmailPanel ? "true" : "false",
+      },
+      {
+        key: "--callToActionSent",
+        data: callToActionSent ? "true" : "false",
+      },
+      {
+        key: "--CTAClickedButNoEmail",
+        data: CTAClickedButNoEmail ? "true" : "false",
+      },
+      { key: "--emailSent", data: emailSent ? "true" : "false" },
+      {
+        key: "--emailClickedButNoEmail",
+        data: emailClickedButNoEmail ? "true" : "false",
+      },
+      {
+        key: "--currentTimeUTC",
+        data: browserInfo?.currentTimeUTC,
+      },
+      { key: "--userTimezone", data: browserInfo?.userTimezone },
+      { key: "--userLanguage", data: browserInfo?.userLanguage },
+    ];
+  };
 
   // public api url for dev and production
   let publicAPIUrl = "https://api.llmasaservice.io";
@@ -197,8 +298,7 @@ const ChatPanel: React.FC<ChatPanelProps & ExtraProps> = ({
   // mcp servers are passed in in the mcps prop. Create a client for each one
   // store the clients in an array mcpClients
   useEffect(() => {
-    const list = Array.isArray(mcpServers) ? mcpServers : [];
-    const clients = list.map(
+    const clients = (mcpServers ?? []).map(
       (m: any) => new MCPClient(m.sseUrl, m.sseUrl, m.sseHeaders)
     );
     setMcpClients(clients);
@@ -259,6 +359,28 @@ const ChatPanel: React.FC<ChatPanelProps & ExtraProps> = ({
   }, [customerEmailCaptureMode]);
 
   useEffect(() => {
+    // do any response actions
+    if (lastCallId && lastCallId !== "" && idle && response) {
+      allActions
+        .filter((a) => a.type === "response")
+        .forEach((action) => {
+          if (action.type === "response" && action.pattern) {
+            const regex = new RegExp(action.pattern, "gi");
+            const matches = regex.exec(response);
+            console.log(
+              "action match",
+              matches,
+              action.pattern,
+              action.callback
+            );
+            if (matches && action.callback) {
+              action.callback(matches[0], matches.slice(1));
+            }
+          }
+        });
+    }
+
+    // call the connected responseCompleteCallback
     if (responseCompleteCallback) {
       if (lastCallId && lastCallId !== "" && idle)
         responseCompleteCallback(lastCallId, lastPrompt ?? "", response);
@@ -324,21 +446,37 @@ const ChatPanel: React.FC<ChatPanelProps & ExtraProps> = ({
   }, [cssUrl]);
 
   const toolUseCallback = useCallback(
-    async (match: string, groups: any[]) => {
-      for (const client of mcpClients) {
-        console.log("tool", groups[1]);
-        console.log("input", groups[2]);
+    async (
+      match: string,
+      groups: any[],
+      contextPrompt?: string | null,
+      contextMessages?: any[],
+      responseKeyOverride?: string
+    ) => {
+      console.log("toolUseCallback", match, groups);
+      console.log("mcpClients", mcpClients);
+      console.log("contextPrompt:", contextPrompt);
+      console.log(
+        "contextMessages:",
+        contextMessages ? JSON.stringify(contextMessages, null, 2) : "none"
+      );
+      console.log("lastPrompt value:", lastPrompt); // Debug the lastPrompt value
+      console.log("lastMessages value:", JSON.stringify(lastMessages, null, 2));
 
+      // Use context parameters if provided, fall back to component state
+      const currentLastMessages = contextMessages || [...lastMessages];
+      const currentPrompt = contextPrompt || lastPrompt || initialPrompt || "";
+      const serviceToUse = service && service !== "" ? service : groups[3];
+
+      for (const client of mcpClients) {
         if (client.toolExists(groups[1])) {
           console.log("tool exists", groups[1]);
           setIsLoading(true);
           try {
             let args;
             try {
-              // First try direct parsing
               args = JSON.parse(groups[2]);
             } catch (e) {
-              // If that fails, try to handle escaped quotes
               try {
                 args = JSON.parse(groups[2].replace(/\\"/g, '"'));
               } catch (err) {
@@ -357,17 +495,30 @@ const ChatPanel: React.FC<ChatPanelProps & ExtraProps> = ({
             ) {
               const textResult = (result as any).content[0]?.text;
 
-              const messagesAndHistory = lastMessages;
+              const messagesAndHistory = [...currentLastMessages];
 
-              messagesAndHistory.push({
-                role: "user",
-                content: [
-                  {
-                    type: "text",
-                    text: lastPrompt ?? "",
-                  },
-                ],
-              });
+              if (currentPrompt) {
+                messagesAndHistory.push({
+                  role: "user",
+                  content: [
+                    {
+                      type: "text",
+                      text: currentPrompt,
+                    },
+                  ],
+                });
+              } else {
+                console.warn("No prompt available for tool use conversation");
+                messagesAndHistory.push({
+                  role: "user",
+                  content: [
+                    {
+                      type: "text",
+                      text: "",
+                    },
+                  ],
+                });
+              }
 
               // openAI format
               messagesAndHistory.push({
@@ -387,65 +538,24 @@ const ChatPanel: React.FC<ChatPanelProps & ExtraProps> = ({
                 tool_call_id: groups[0],
               });
 
-              const browserInfo = getBrowserInfo();
+              console.log(
+                "Sending messages for tool response:",
+                JSON.stringify(messagesAndHistory, null, 2)
+              );
+
               send(
                 "",
                 messagesAndHistory,
                 [
-                  ...data,
-                  {
-                    key: "--customer_id",
-                    data: currentCustomer?.customer_id ?? "",
-                  },
-                  {
-                    key: "--customer_name",
-                    data: currentCustomer?.customer_name ?? "",
-                  },
-                  {
-                    key: "--customer_user_id",
-                    data: currentCustomer?.customer_user_id ?? "",
-                  },
-                  {
-                    key: "--customer_user_email",
-                    data: currentCustomer?.customer_user_email ?? "",
-                  },
-                  { key: "--email", data: emailInput ?? "" },
-                  { key: "--emailValid", data: emailValid ? "true" : "false" },
-                  {
-                    key: "--emailInputSet",
-                    data: emailInputSet ? "true" : "false",
-                  },
-                  {
-                    key: "--emailPanelShowing",
-                    data: showEmailPanel ? "true" : "false",
-                  },
-                  {
-                    key: "--callToActionSent",
-                    data: callToActionSent ? "true" : "false",
-                  },
-                  {
-                    key: "--CTAClickedButNoEmail",
-                    data: CTAClickedButNoEmail ? "true" : "false",
-                  },
-                  { key: "--emailSent", data: emailSent ? "true" : "false" },
-                  {
-                    key: "--emailClickedButNoEmail",
-                    data: emailClickedButNoEmail ? "true" : "false",
-                  },
+                  ...dataWithExtras(),
                   {
                     key: "--messages",
                     data: messagesAndHistory.length.toString(),
                   },
-                  {
-                    key: "--currentTimeUTC",
-                    data: browserInfo?.currentTimeUTC,
-                  },
-                  { key: "--userTimezone", data: browserInfo?.userTimezone },
-                  { key: "--userLanguage", data: browserInfo?.userLanguage },
                 ],
                 true,
                 true,
-                service && service !== "" ? service : groups[3], // call the same service that asked for the tool_use
+                serviceToUse,
                 currentConversation,
                 lastController
               );
@@ -460,14 +570,198 @@ const ChatPanel: React.FC<ChatPanelProps & ExtraProps> = ({
     },
     [
       mcpClients,
-      lastPrompt,
-      lastMessages,
-      lastController,
-      data,
+      send,
+      dataWithExtras,
       service,
       currentConversation,
+      lastController,
+      lastPrompt,
+      lastMessages,
+      initialPrompt,
     ]
-  ); // This ensures the callback gets recreated when things change
+  );
+  // pre-defined action callbacks
+  const extractValue = (
+    match: string,
+    groups: any[] = [],
+    extraArgs: string[] = []
+  ): string => {
+    // Rule 1: If there are no extraArgs and no groups, use match.
+    if (
+      (!extraArgs || extraArgs.length === 0) &&
+      (!groups || groups.length === 0)
+    ) {
+      return match;
+    }
+    // Rule 2: If there are no extraArgs but groups exist, use groups[0].
+    if ((!extraArgs || extraArgs.length === 0) && groups && groups.length > 0) {
+      return groups[0];
+    }
+    // Rule 3: If there are extraArgs, use the first one as a template.
+    if (extraArgs && extraArgs.length > 0) {
+      const template = extraArgs[0] ?? "";
+      return template.replace(/\$(\d+)/g, (_, index) => {
+        const i = parseInt(index, 10);
+        return groups[i] !== undefined ? groups[i] : "";
+      });
+    }
+    return "";
+  };
+
+  const openUrlActionCallback = useCallback(
+    (match: string, groups: any[], ...extraArgs: string[]) => {
+      const url = extractValue(match, groups, extraArgs);
+      if (url?.startsWith("http") || url?.startsWith("mailto")) {
+        window.open(url, "_blank");
+      }
+    },
+    []
+  );
+
+  const copyToClipboardCallback = useCallback(
+    (match: string, groups: any[], ...extraArgs: string[]) => {
+      const val = extractValue(match, groups, extraArgs);
+      navigator.clipboard.writeText(val);
+    },
+    []
+  );
+
+  const showAlertCallback = useCallback(
+    (match: string, groups: any[], ...extraArgs: string[]) => {
+      alert(extractValue(match, groups, extraArgs));
+    },
+    []
+  );
+
+  const sendFollowOnPromptCallback = useCallback(
+    (match: string, groups: any[], ...extraArgs: string[]) => {
+      const val = extractValue(match, groups, extraArgs);
+      if (val && val !== followOnPrompt) {
+        continueChat(val);
+      }
+    },
+    [followOnPrompt]
+  );
+
+  const setFollowUpQuestionsCallback = useCallback(
+    (match: string, groups: any[], ...extraArgs: string[]) => {
+      const val = extractValue(match, groups, extraArgs).split("|");
+      setFollowOnQuestionsState(val);
+    },
+    [followOnQuestions]
+  );
+
+  const openIframeCallback = useCallback(
+    (match: string, groups: any[], ...extraArgs: string[]) => {
+      const url = extractValue(match, groups, extraArgs);
+      if (url?.startsWith("http")) {
+        setIframeUrl(url);
+      }
+    },
+    []
+  );
+
+  const anthropic_toolAction = {
+    pattern:
+      '\\{"type":"tool_use","id":"([^"]+)","name":"([^"]+)","input":(\\{[^}]+\\}),"service":"([^"]+)"\\}',
+    type: "button",
+    markdown: "Approve Tool Use: $2",
+    callback: toolUseCallback,
+  };
+
+  const openAI_toolAction = {
+    pattern:
+      '\\{"id":"([^"]+)","type":"function","function":\\{"name":"([^"]+)","arguments":"((?:\\\\.|[^"\\\\])*)"\\},"service":"([^"]+)"\\}',
+    type: "button",
+    markdown: "Approve Tool Use: $2",
+    callback: toolUseCallback,
+  };
+
+  // google doesn't return an id, so we just grab functioCall
+  const google_toolAction = {
+    pattern:
+      '^\\{\\s*"(functionCall)"\\s*:\\s*\\{\\s*"name"\\s*:\\s*"([^"]+)"\\s*,\\s*"args"\\s*:\\s*(\\{[^}]+\\})\\s*\\}\\s*,\\s*"service"\\s*:\\s*"([^"]+)"\\s*\\}$',
+    type: "button",
+    markdown: "Approve Tool Use: $2",
+    callback: toolUseCallback,
+  };
+
+  type ActionCallback = (
+    match: string,
+    groups: any[],
+    ...extraArgs: string[]
+  ) => void;
+
+  const callbackMapping: Record<string, ActionCallback> = useMemo(
+    () => ({
+      openUrlActionCallback,
+      copyToClipboardCallback,
+      showAlertCallback,
+      sendFollowOnPromptCallback,
+      setFollowUpQuestionsCallback,
+      openIframeCallback,
+    }),
+    [
+      openUrlActionCallback,
+      copyToClipboardCallback,
+      showAlertCallback,
+      sendFollowOnPromptCallback,
+      setFollowUpQuestionsCallback,
+      openIframeCallback,
+    ]
+  );
+  const parseCallbackString = (callbackStr: string) => {
+    const regex = /^(\w+)(?:\((.+)\))?$/;
+    const match = callbackStr.match(regex);
+    if (match) {
+      const name = match[1];
+      // If there are args, split by comma and trim whitespace.
+      const args = match[2] ? match[2].split(",").map((arg) => arg.trim()) : [];
+      return { name, args };
+    }
+    return null;
+  };
+
+  const getActionsArraySafely = (actionsString: string) => {
+    let actions: any[] = [];
+    if (actionsString && actionsString !== "") {
+      try {
+        actions = JSON.parse(actionsString);
+        if (!Array.isArray(actions)) {
+          throw new Error("Parsed actions is not an array");
+        }
+        // Map string callbacks to actual functions using callbackMapping and parsing args if needed
+        actions = actions
+          .map((action) => {
+            if (typeof action.callback === "string") {
+              const parsed = parseCallbackString(action.callback);
+              if (parsed && parsed.name && callbackMapping[parsed.name]) {
+                // Wrap the callback so that it receives the original match & groups plus extra args
+                const mappedCallback = callbackMapping[parsed.name];
+                if (mappedCallback) {
+                  return {
+                    ...action,
+                    callback: (match: string, groups: any[]) =>
+                      mappedCallback(match, groups, ...parsed.args),
+                  };
+                }
+              } else {
+                console.warn("Invalid or missing callback in action:", action);
+                // Optionally provide a no-op fallback or skip the action:
+                return null;
+              }
+            } else {
+              return action;
+            }
+          })
+          .filter(Boolean); // removes null entries
+      } catch (error) {
+        console.error("Error parsing actions string:", error);
+        actions = [];
+      }
+    }
+    return actions;
+  };
 
   // add our MCP tool use action to the list of actions
   useEffect(() => {
@@ -478,40 +772,19 @@ const ChatPanel: React.FC<ChatPanelProps & ExtraProps> = ({
     group 3: input
     group 4: service
     */
-
-    const anthropic_toolAction = {
-      pattern:
-        '\\{"type":"tool_use","id":"([^"]+)","name":"([^"]+)","input":(\\{[^}]+\\}),"service":"([^"]+)"\\}',
-      type: "button",
-      markdown: "Approve Tool Use: $2",
-      callback: toolUseCallback,
-    };
-
-    const openAI_toolAction = {
-      pattern:
-        '\\{"id":"([^"]+)","type":"function","function":\\{"name":"([^"]+)","arguments":"((?:\\\\.|[^"\\\\])*)"\\},"service":"([^"]+)"\\}',
-      type: "button",
-      markdown: "Approve Tool Use: $2",
-      callback: toolUseCallback,
-    };
-
-    // google doesn't return an id, so we just grab functioCall
-    const google_toolAction = {
-      pattern:
-        '^\\{\\s*"(functionCall)"\\s*:\\s*\\{\\s*"name"\\s*:\\s*"([^"]+)"\\s*,\\s*"args"\\s*:\\s*(\\{[^}]+\\})\\s*\\}\\s*,\\s*"service"\\s*:\\s*"([^"]+)"\\s*\\}$',
-      type: "button",
-      markdown: "Approve Tool Use: $2",
-      callback: toolUseCallback,
-    };
-
+    const actionsString =
+      typeof actions === "string" ? actions : JSON.stringify(actions);
     setAllActions([
-      ...actions,
+      ...getActionsArraySafely(actionsString),
       anthropic_toolAction,
       openAI_toolAction,
       google_toolAction,
     ]);
-  }, [actions, toolUseCallback]);
 
+    console.log("use effect allActions", allActions);
+  }, [actions]);
+
+  const responseContextMapRef = useRef(new Map());
   // response change. Update the history
   useEffect(() => {
     if (response && response.length > 0) {
@@ -519,55 +792,100 @@ const ChatPanel: React.FC<ChatPanelProps & ExtraProps> = ({
 
       let newResponse = response;
 
-      // replace actions with links
-      if (allActions && allActions.length > 0) {
-        allActions.forEach((action, index) => {
-          const regex = new RegExp(action.pattern, "gmi");
-          newResponse = newResponse.replace(regex, (match, ...groups) => {
-            console.log("action match", match, groups);
-
-            const matchIndex = groups[groups.length - 2]; // The second-to-last argument is the match index
-            const buttonId = `button-${messages.length}-${index}-${matchIndex}`; // a unique button for the conversation level, action index, match index
-
-            let html = match;
-            if (action.type === "button" || action.type === "callback") {
-              html = `<br /> <button id="${buttonId}"  ${
-                action.style ? 'class=" ' + action.style + '"' : ""
-              }>${action.markdown ?? match}</button>`;
-            } else if (action.type === "markdown" || action.type === "html") {
-              html = action.markdown ?? "";
-            }
-
-            html = html.replace(new RegExp("\\$match", "g"), match);
-            groups.forEach((group, index) => {
-              html = html.replace(new RegExp(`\\$${index + 1}`, "g"), group);
-            });
-
-            setTimeout(() => {
-              const button = document.getElementById(buttonId);
-              if (button) {
-                if (!button.onclick) {
-                  button.onclick = () => {
-                    if (action.callback) {
-                      action.callback(match, groups);
-                    }
-                    if (action.clickCode) {
-                      try {
-                        const func = new Function("match", action.clickCode);
-                        func(match);
-                        interactionClicked(lastCallId, "action");
-                      } catch (error) {
-                        console.error("Error executing clickCode:", error);
-                      }
-                    }
-                  };
-                }
-              }
-            }, 0);
-
-            return html;
-          });
+      // Store the context for this response
+      const responseKey = `response-${Date.now()}`;
+      setResponseContextMap((current) => {
+        const updated = new Map(current);
+        updated.set(responseKey, {
+          prompt: lastPrompt || initialPrompt || "",
+          messages: [...lastMessages],
         });
+        responseContextMapRef.current = updated;  // Keep the ref in sync
+        return updated;
+      });
+
+      if (allActions && allActions.length > 0) {
+        allActions
+          .filter((a) => a.type !== "response")
+          .forEach((action, index) => {
+            const regex = new RegExp(action.pattern, "gmi");
+            newResponse = newResponse.replace(regex, (match, ...groups) => {
+              console.log("action match", match, groups);
+
+              const matchIndex = groups[groups.length - 2];
+              const buttonId = `button-${messages.length}-${index}-${matchIndex}`;
+
+              let html = match;
+              if (action.type === "button" || action.type === "callback") {
+                // Add data attributes to store context information
+                html = `<br /> <button id="${buttonId}" 
+                  data-response-key="${responseKey}"
+                  ${action.style ? 'class=" ' + action.style + '"' : ""}>
+                  ${action.markdown ?? match}
+                </button>`;
+              } else if (action.type === "markdown" || action.type === "html") {
+                html = action.markdown ?? "";
+              }
+
+              html = html.replace(new RegExp("\\$match", "g"), match);
+              groups.forEach((group, index) => {
+                html = html.replace(new RegExp(`\\$${index + 1}`, "g"), group);
+              });
+
+              setTimeout(() => {
+                const button = document.getElementById(buttonId);
+                if (button) {
+                  if (!button.onclick) {
+                    // Get the context directly from the map when the button is clicked
+                    button.onclick = () => {
+                      const responseKey =
+                        button.getAttribute("data-response-key");
+
+                        const contextData = responseKey ? responseContextMapRef.current.get(responseKey) : null;
+
+                      if (action.callback === toolUseCallback) {
+                        console.log(
+                          "Tool button clicked with context:",
+                          contextData
+                        );
+                        if (contextData) {
+                          // Call toolUseCallback with the stored context data
+                          toolUseCallback(
+                            match,
+                            groups.slice(0, -2),
+                            contextData.prompt,
+                            contextData.messages,
+                            responseKey ?? undefined
+                          );
+                        } else {
+                          console.warn(
+                            "No context found for response key:",
+                            responseKey
+                          );
+                          // Fallback to current state
+                          toolUseCallback(match, groups.slice(0, -2));
+                        }
+                      } else if (action.callback) {
+                        action.callback(match, groups);
+                      }
+
+                      if (action.clickCode) {
+                        try {
+                          const func = new Function("match", action.clickCode);
+                          func(match);
+                          interactionClicked(lastCallId, "action");
+                        } catch (error) {
+                          console.error("Error executing clickCode:", error);
+                        }
+                      }
+                    };
+                  }
+                }
+              }, 0);
+
+              return html;
+            });
+          });
       }
 
       setHistory((prevHistory) => {
@@ -577,34 +895,20 @@ const ChatPanel: React.FC<ChatPanelProps & ExtraProps> = ({
         };
       });
     }
-  }, [response]);
+  }, [
+    response,
+    allActions,
+    lastKey,
+    lastCallId,
+    messages.length,
+    lastPrompt,
+    lastMessages,
+    initialPrompt,
+  ]);
 
   function hasVerticalScrollbar(element: any) {
     return element.scrollHeight > element.clientHeight;
   }
-
-  const getBrowserInfo = () => {
-    try {
-      return {
-        currentTimeUTC: new Date().toISOString(),
-        userTimezone:
-          (typeof Intl !== "undefined" &&
-            Intl.DateTimeFormat().resolvedOptions().timeZone) ||
-          "unknown",
-        userLanguage:
-          (typeof navigator !== "undefined" &&
-            (navigator.language || navigator.language)) ||
-          "unknown",
-      };
-    } catch (e) {
-      console.warn("Error getting browser info:", e);
-      return {
-        currentTimeUTC: new Date().toISOString(),
-        userTimezone: "unknown",
-        userLanguage: "unknown",
-      };
-    }
-  };
 
   // initial prompt change. Reset the chat history and get this response
   useEffect(() => {
@@ -616,56 +920,19 @@ const ChatPanel: React.FC<ChatPanelProps & ExtraProps> = ({
           if (lastController) stop(lastController);
           const controller = new AbortController();
 
-          const browserInfo = getBrowserInfo();
+          // Capture context right before sending
+          const contextMessages = [...messages];
+          const contextPrompt = initialPrompt;
 
           send(
             initialPrompt,
             messages,
             [
-              ...data,
+              ...dataWithExtras(),
               {
-                key: "--customer_id",
-                data: currentCustomer?.customer_id ?? "",
+                key: "--messages",
+                data: messages.length.toString(),
               },
-              {
-                key: "--customer_name",
-                data: currentCustomer?.customer_name ?? "",
-              },
-              {
-                key: "--customer_user_id",
-                data: currentCustomer?.customer_user_id ?? "",
-              },
-              {
-                key: "--customer_user_email",
-                data: currentCustomer?.customer_user_email ?? "",
-              },
-              { key: "--email", data: emailInput ?? "" },
-              { key: "--emailValid", data: emailValid ? "true" : "false" },
-              {
-                key: "--emailInputSet",
-                data: emailInputSet ? "true" : "false",
-              },
-              {
-                key: "--emailPanelShowing",
-                data: showEmailPanel ? "true" : "false",
-              },
-              {
-                key: "--callToActionSent",
-                data: callToActionSent ? "true" : "false",
-              },
-              {
-                key: "--CTAClickedButNoEmail",
-                data: CTAClickedButNoEmail ? "true" : "false",
-              },
-              { key: "--emailSent", data: emailSent ? "true" : "false" },
-              {
-                key: "--emailClickedButNoEmail",
-                data: emailClickedButNoEmail ? "true" : "false",
-              },
-              { key: "--messages", data: messages.length.toString() },
-              { key: "--currentTimeUTC", data: browserInfo?.currentTimeUTC },
-              { key: "--userTimezone", data: browserInfo?.userTimezone },
-              { key: "--userLanguage", data: browserInfo?.userLanguage },
             ],
             true,
             true,
@@ -673,6 +940,8 @@ const ChatPanel: React.FC<ChatPanelProps & ExtraProps> = ({
             convId,
             controller
           );
+
+          // Store the context in component state
           setLastPrompt(initialPrompt);
           setLastMessages(messages);
           setLastKey(initialPrompt);
@@ -791,8 +1060,6 @@ const ChatPanel: React.FC<ChatPanelProps & ExtraProps> = ({
   };
 
   useEffect(() => {
-    console.log("currentCustomer effect", currentCustomer);
-
     // Helper to check if a value is empty
     const isEmpty = (value: string | undefined | null): boolean => {
       return !value || value.trim() === "" || value.trim() === "undefined";
@@ -814,9 +1081,12 @@ const ChatPanel: React.FC<ChatPanelProps & ExtraProps> = ({
         "llmasaservice-panel-customer-user-email",
         currentCustomer?.customer_user_email ?? ""
       );
-      setEmailInput(currentCustomer.customer_user_email ?? "");
-      setEmailInputSet(true);
-      setEmailValid(true);
+      // Only update email state if it's different from the cookie-derived value
+      if (emailInput !== currentCustomer.customer_user_email) {
+        setEmailInput(currentCustomer.customer_user_email ?? "");
+        setEmailInputSet(true);
+        setEmailValid(true);
+      }
     }
 
     // Then, check for any missing values and try to get them from cookies
@@ -836,17 +1106,23 @@ const ChatPanel: React.FC<ChatPanelProps & ExtraProps> = ({
       }
     }
 
-    if (needsUpdate) {
+    // Only update state if the derived values are actually different
+    if (
+      needsUpdate &&
+      (updatedValues.customer_id !== currentCustomer.customer_id ||
+        updatedValues.customer_user_email !==
+          currentCustomer.customer_user_email)
+    ) {
       // update the customer id and email in the conversation
       ensureConversation().then((convId) => {
         if (convId && convId !== "") {
           console.log(
             "updating conversation with customer id and email",
             convId,
-            currentCustomer
+            updatedValues
           );
 
-          const r = fetch(`${publicAPIUrl}/conversations/${convId}`, {
+          fetch(`${publicAPIUrl}/conversations/${convId}`, {
             method: "POST",
             headers: {
               "Content-Type": "application/json",
@@ -856,13 +1132,15 @@ const ChatPanel: React.FC<ChatPanelProps & ExtraProps> = ({
               customerId: updatedValues.customer_id,
               customerEmail: updatedValues.customer_user_email,
             }),
-          });
+          }).catch((error) =>
+            console.error("Failed to update conversation:", error)
+          );
         }
       });
 
       setCurrentCustomer(updatedValues);
     }
-  }, [currentCustomer]);
+  }, [currentCustomer, project_id, agent, publicAPIUrl, emailInput]);
 
   const continueChat = (suggestion?: string) => {
     console.log("continueChat", suggestion);
@@ -888,13 +1166,7 @@ const ChatPanel: React.FC<ChatPanelProps & ExtraProps> = ({
       }
 
       if (clearFollowOnQuestionsNextPrompt) {
-        followOnQuestions = [];
-        const suggestionsContainer = document.querySelector(
-          ".suggestions-container"
-        );
-        if (suggestionsContainer) {
-          suggestionsContainer.innerHTML = "";
-        }
+        setFollowOnQuestionsState([]);
       }
 
       if (
@@ -972,52 +1244,16 @@ const ChatPanel: React.FC<ChatPanelProps & ExtraProps> = ({
         }
 
         console.log("Sending for conversation", convId);
-
-        const browserInfo = getBrowserInfo();
-
         const controller = new AbortController();
         send(
           nextPromptToSend,
           messagesAndHistory,
           [
-            ...data,
-            { key: "--customer_id", data: currentCustomer?.customer_id ?? "" },
+            ...dataWithExtras(),
             {
-              key: "--customer_name",
-              data: currentCustomer?.customer_name ?? "",
+              key: "--messages",
+              data: messagesAndHistory.length.toString(),
             },
-            {
-              key: "--customer_user_id",
-              data: currentCustomer?.customer_user_id ?? "",
-            },
-            {
-              key: "--customer_user_email",
-              data: currentCustomer?.customer_user_email ?? "",
-            },
-            { key: "--email", data: emailInput ?? "" },
-            { key: "--emailValid", data: emailValid ? "true" : "false" },
-            { key: "--emailInputSet", data: emailInputSet ? "true" : "false" },
-            {
-              key: "--emailPanelShowing",
-              data: showEmailPanel ? "true" : "false",
-            },
-            {
-              key: "--callToActionSent",
-              data: callToActionSent ? "true" : "false",
-            },
-            {
-              key: "--CTAClickedButNoEmail",
-              data: CTAClickedButNoEmail ? "true" : "false",
-            },
-            { key: "--emailSent", data: emailSent ? "true" : "false" },
-            {
-              key: "--emailClickedButNoEmail",
-              data: emailClickedButNoEmail ? "true" : "false",
-            },
-            { key: "--messages", data: messagesAndHistory.length.toString() },
-            { key: "--currentTimeUTC", data: browserInfo?.currentTimeUTC },
-            { key: "--userTimezone", data: browserInfo?.userTimezone },
-            { key: "--userLanguage", data: browserInfo?.userLanguage },
           ],
           true,
           true,
@@ -1468,20 +1704,22 @@ const ChatPanel: React.FC<ChatPanelProps & ExtraProps> = ({
             </div>
           ))}
 
-          {followOnQuestions && followOnQuestions.length > 0 && idle && (
-            <div className="suggestions-container">
-              {followOnQuestions.map((question, index) => (
-                <button
-                  key={index}
-                  className="suggestion-button"
-                  onClick={() => handleSuggestionClick(question)}
-                  disabled={!idle || isDisabledDueToNoEmail()}
-                >
-                  {question}
-                </button>
-              ))}
-            </div>
-          )}
+          {followOnQuestionsState &&
+            followOnQuestionsState.length > 0 &&
+            idle && (
+              <div className="suggestions-container">
+                {followOnQuestionsState.map((question, index) => (
+                  <button
+                    key={index}
+                    className="suggestion-button"
+                    onClick={() => handleSuggestionClick(question)}
+                    disabled={!idle || isDisabledDueToNoEmail()}
+                  >
+                    {question}
+                  </button>
+                ))}
+              </div>
+            )}
 
           <div ref={bottomRef} />
 
@@ -1852,6 +2090,46 @@ const ChatPanel: React.FC<ChatPanelProps & ExtraProps> = ({
         )}
       </div>
       <div ref={bottomPanelRef} />
+      {/* Modal with iframe */}
+      {iframeUrl && (
+        <div
+          style={{
+            position: "fixed",
+            top: 0,
+            left: 0,
+            width: "100vw",
+            height: "100vh",
+            backgroundColor: "rgba(0, 0, 0, 0.7)",
+            display: "flex",
+            justifyContent: "center",
+            alignItems: "center",
+            zIndex: 9999,
+          }}
+        >
+          <div style={{ position: "relative", width: "95vw", height: "95vh" }}>
+            <button
+              onClick={() => setIframeUrl(null)}
+              style={{
+                position: "absolute",
+                top: 10,
+                right: 10,
+                zIndex: 10000,
+                background: "#fff",
+                border: "none",
+                padding: "5px 5px",
+                cursor: "pointer",
+              }}
+            >
+              Close
+            </button>
+            <iframe
+              src={iframeUrl}
+              title="Dynamic Iframe"
+              style={{ width: "100%", height: "100%", border: "none" }}
+            />
+          </div>
+        </div>
+      )}
     </>
   );
 };
