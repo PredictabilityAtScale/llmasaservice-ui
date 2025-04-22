@@ -180,6 +180,15 @@ const ChatPanel: React.FC<ChatPanelProps & ExtraProps> = ({
       callback?: (match: string, groups: any[]) => void;
       clickCode?: string;
       style?: string;
+      actionType?: string;
+    }[]
+  >([]);
+
+  const [pendingToolRequests, setPendingToolRequests] = useState<
+    {
+      match: string;
+      groups: any[];
+      toolName: string;
     }[]
   >([]);
 
@@ -465,112 +474,6 @@ const ChatPanel: React.FC<ChatPanelProps & ExtraProps> = ({
     dataWithExtrasRef.current = dataWithExtras;
   }, [dataWithExtras]);
 
-  const toolUseCallback = useCallback(
-    async (match: string, groups: any[]) => {
-      const serviceToUse = service && service !== "" ? service : groups[3];
-      const currentLastKey = lastKeyRef.current;
-      const currentLastMessages = lastMessagesRef.current;
-      const currentMcpClients = mcpClientsRef.current;
-      const currentSend = sendRef.current;
-      const refCurrentConversation = conversationRef.current;
-      const currentLastController = lastControllerRef.current;
-      const currentDataWithExtras = dataWithExtrasRef.current;
-
-      for (const client of currentMcpClients) {
-        if (client.toolExists(groups[1])) {
-          console.log("tool exists", groups[1]);
-          setIsLoading(true);
-          try {
-            let args;
-            try {
-              args = JSON.parse(groups[2]);
-            } catch (e) {
-              try {
-                args = JSON.parse(groups[2].replace(/\\"/g, '"'));
-              } catch (err) {
-                console.error("Failed to parse tool arguments:", err);
-                console.log("Raw argument string:", groups[2]);
-                throw new Error("Could not parse tool arguments");
-              }
-            }
-
-            const result = await client.callTool(groups[1], args);
-
-            if (
-              result &&
-              result.content &&
-              (result as any).content?.length > 0
-            ) {
-              const textResult = (result as any).content[0]?.text;
-
-              const messagesAndHistory = [...currentLastMessages];
-              const currentPrompt = currentLastKey ?? initialPrompt;
-
-              if (currentPrompt) {
-                messagesAndHistory.push({
-                  role: "user",
-                  content: [
-                    {
-                      type: "text",
-                      text: currentPrompt,
-                    },
-                  ],
-                });
-              } else {
-                console.warn("No prompt available for tool use conversation");
-              }
-
-              // openAI format messages
-              messagesAndHistory.push({
-                role: "assistant",
-                content: [],
-                tool_calls: [JSON.parse(match)],
-              });
-
-              messagesAndHistory.push({
-                role: "tool",
-                content: [
-                  {
-                    type: "text",
-                    text: textResult,
-                  },
-                ],
-                tool_call_id: groups[0],
-              });
-
-              console.log(
-                "Sending messages for tool response:",
-                JSON.stringify(messagesAndHistory, null, 2)
-              );
-
-              currentSend(
-                "",
-                messagesAndHistory,
-                [
-                  ...currentDataWithExtras(),
-                  {
-                    key: "--messages",
-                    data: messagesAndHistory.length.toString(),
-                  },
-                ],
-                true,
-                true,
-                serviceToUse,
-                refCurrentConversation,
-                currentLastController
-              );
-            } else {
-              console.error("No content in result", result);
-            }
-          } catch (error) {
-            console.error("Error calling tool:", error);
-          }
-        }
-      }
-    },
-    [initialPrompt]
-  );
-
   const extractValue = (
     match: string,
     groups: any[] = [],
@@ -654,26 +557,26 @@ const ChatPanel: React.FC<ChatPanelProps & ExtraProps> = ({
   const anthropic_toolAction = {
     pattern:
       '\\{"type":"tool_use","id":"([^"]+)","name":"([^"]+)","input":(\\{[^}]+\\}),"service":"([^"]+)"\\}',
-    type: "button",
-    markdown: "Approve Tool Use: $2",
-    callback: toolUseCallback,
+    type: "markdown",
+    markdown: "<br />*Tool use requested: $2*",
+    actionType: "tool",
   };
 
   const openAI_toolAction = {
     pattern:
       '\\{"id":"([^"]+)","type":"function","function":\\{"name":"([^"]+)","arguments":"((?:\\\\.|[^"\\\\])*)"\\},"service":"([^"]+)"\\}',
-    type: "button",
-    markdown: "Approve Tool Use: $2",
-    callback: toolUseCallback,
+    type: "markdown",
+    markdown: "<br />*Tool use requested: $2*",
+    actionType: "tool",
   };
 
   // google doesn't return an id, so we just grab functioCall
   const google_toolAction = {
     pattern:
       '^\\{\\s*"(functionCall)"\\s*:\\s*\\{\\s*"name"\\s*:\\s*"([^"]+)"\\s*,\\s*"args"\\s*:\\s*(\\{[^}]+\\})\\s*\\}\\s*,\\s*"service"\\s*:\\s*"([^"]+)"\\s*\\}$',
-    type: "button",
-    markdown: "Approve Tool Use: $2",
-    callback: toolUseCallback,
+    type: "markdown",
+    markdown: "<br />*Tool use requested: $2*",
+    actionType: "tool",
   };
 
   type ActionCallback = (
@@ -766,13 +669,190 @@ const ChatPanel: React.FC<ChatPanelProps & ExtraProps> = ({
     console.log("use effect allActions", allActions);
   }, [actions]);
 
+  const pendingToolRequestsRef = useRef(pendingToolRequests);
+
+  useEffect(() => {
+    pendingToolRequestsRef.current = pendingToolRequests;
+  }, [pendingToolRequests]);
+
+  const processAllToolRequests = async () => {
+    const currentToolRequests = pendingToolRequestsRef.current;
+    console.log("processAllToolRequests", currentToolRequests);
+
+    if (currentToolRequests.length === 0) return;
+
+    setIsLoading(true);
+
+    const toolsToProcess = [...currentToolRequests];
+    setPendingToolRequests([]);
+    try {
+      // Get references to current state values through refs
+      const currentMcpClients = mcpClientsRef.current;
+      const currentSend = sendRef.current;
+      const refCurrentConversation = conversationRef.current;
+      const currentLastController = lastControllerRef.current;
+      const currentDataWithExtras = dataWithExtrasRef.current;
+      const initialPrompt = lastKeyRef.current ?? "";
+
+      // Start with base messages including the user's original question
+      const newMessages = [
+        {
+          role: "user",
+          content: [
+            {
+              type: "text",
+              text: initialPrompt,
+            },
+          ],
+        },
+      ];
+
+      // Add a single assistant message with ALL tool calls
+      const toolCallsMessage = {
+        role: "assistant",
+        content: [],
+        tool_calls: [], // Will fill this with all tool calls
+      };
+
+      // Parse all tool calls first
+      const toolCallsPromises = toolsToProcess.map(async (req) => {
+        if (!req) return null;
+
+        try {
+          return {
+            req,
+            parsedToolCall: JSON.parse(req.match),
+          };
+        } catch (e) {
+          console.error("Failed to parse tool call:", e);
+          return null;
+        }
+      });
+
+      // Wait for all tool calls to be parsed
+      const parsedToolCalls = await Promise.all(toolCallsPromises);
+
+      // Add all tool calls to the assistant message
+      parsedToolCalls.forEach((item) => {
+        if (item && item.parsedToolCall) {
+          (toolCallsMessage.tool_calls as any[]).push(item.parsedToolCall);
+        }
+      });
+
+      // Add the assistant message with all tool calls
+      newMessages.push(toolCallsMessage);
+
+      // Process each tool and add responses one by one
+      const toolResponsePromises = parsedToolCalls.map(async (item) => {
+        if (!item || !item.req) return null;
+
+        const req = item.req;
+        console.log(`Processing tool ${req.toolName}`);
+
+        // Find the client that can handle this tool
+        for (const client of currentMcpClients) {
+          if (client.toolExists(req.groups[1])) {
+            try {
+              let args;
+              try {
+                args = JSON.parse(req.groups[2]);
+              } catch (e) {
+                try {
+                  args = JSON.parse(req.groups[2].replace(/\\"/g, '"'));
+                } catch (err) {
+                  console.error("Failed to parse tool arguments:", err);
+                  return null;
+                }
+              }
+              const result = await client.callTool(req.groups[1], args);
+
+              if (
+                result &&
+                result.content &&
+                (result as any).content?.length > 0
+              ) {
+                const textResult = (result as any).content[0]?.text;
+                return {
+                  role: "tool",
+                  content: [
+                    {
+                      type: "text",
+                      text: textResult,
+                    },
+                  ],
+                  tool_call_id: req.groups[0],
+                };
+              }
+            } catch (error) {
+              console.error("Error calling tool:", error);
+            }
+          }
+        }
+        return null;
+      });
+
+      // Wait for all tool responses
+      const toolResponses = await Promise.all(toolResponsePromises);
+
+      // Add all valid tool responses to the messages
+      toolResponses.forEach((response) => {
+        if (response) {
+          newMessages.push(response);
+        }
+      });
+
+      // 4. Finally send the complete message structure to the LLM
+      console.log("Sending final messages with all tool results:", newMessages);
+
+      currentSend(
+        "",
+        newMessages as any,
+        [
+          ...currentDataWithExtras(),
+          {
+            key: "--messages",
+            data: newMessages.length.toString(),
+          },
+        ],
+        true,
+        true,
+        service,
+        refCurrentConversation,
+        currentLastController
+      );
+    } catch (error) {
+      console.error("Error in processing all tools:", error);
+      setIsLoading(false);
+    }
+  };
+
   useEffect(() => {
     if (response && response.length > 0) {
       setIsLoading(false);
 
       let newResponse = response;
+      const toolRequests: { match: string; groups: any[]; toolName: string }[] =
+        [];
 
       if (allActions && allActions.length > 0) {
+        // Detect all tool requests first
+        allActions
+          .filter((a) => a.actionType === "tool")
+          .forEach((action) => {
+            const regex = new RegExp(action.pattern, "gmi");
+            let match;
+            const content = newResponse;
+
+            // Use exec in a loop to find all matches
+            while ((match = regex.exec(content)) !== null) {
+              toolRequests.push({
+                match: match[0],
+                groups: Array.from(match).slice(1),
+                toolName: match[2] ?? "tool", // Tool name should always in the 2nd capture group
+              });
+            }
+          });
+
         allActions
           .filter((a) => a.type !== "response")
           .forEach((action, index) => {
@@ -831,6 +911,33 @@ const ChatPanel: React.FC<ChatPanelProps & ExtraProps> = ({
           });
       }
 
+      if (toolRequests.length > 0) {
+        console.log("toolRequests", toolRequests);
+        setPendingToolRequests(toolRequests);
+        const approveAllId = `approve-all-${lastCallId}`;
+        newResponse += `<br /><br /><button id="${approveAllId}" class="suggestion-button">${
+          toolRequests.length > 1
+            ? `Approve All ${toolRequests.length} Tools`
+            : "Approve Tool Use"
+        }</button>`;
+
+        // Add the onclick handler after rendering
+        setTimeout(() => {
+          const approveAllButton = document.getElementById(
+            approveAllId
+          ) as HTMLButtonElement;
+          if (approveAllButton) {
+            approveAllButton.onclick = () => {
+              approveAllButton.disabled = true;
+              approveAllButton.textContent = `Processing ${toolRequests.length} Tools...`;
+              processAllToolRequests();
+            };
+          }
+        }, 0);
+      } else {
+        setPendingToolRequests([]);
+      }
+
       setHistory((prevHistory) => {
         return {
           ...prevHistory,
@@ -862,11 +969,6 @@ const ChatPanel: React.FC<ChatPanelProps & ExtraProps> = ({
         ensureConversation().then((convId) => {
           if (lastController) stop(lastController);
           const controller = new AbortController();
-
-          // Capture context right before sending
-          const contextMessages = [...messages];
-          const contextPrompt = initialPrompt;
-
           send(
             initialPrompt,
             messages,

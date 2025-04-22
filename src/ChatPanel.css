@@ -560,3 +560,22 @@
     transform: translateY(-10px);
   }
 }
+
+.llm-panel .approve-all-button {
+  background-color: var(--button-background-color-hover);
+  color: var(--button-text-color-hover);
+  border: 1px solid var(--button-border-color);
+  border-radius: var(--border-radius);
+  padding: 8px 15px;
+  font-size: 0.9em;
+  font-weight: bold;
+  cursor: pointer;
+  margin: var(--spacing-medium) 0;
+  box-shadow: var(--button-drop-shadow);
+  display: inline-block;
+}
+
+.llm-panel .approve-all-button:hover {
+  filter: brightness(1.1);
+  transform: translateY(-1px);
+}

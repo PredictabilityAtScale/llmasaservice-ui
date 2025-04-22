@@ -1,6 +1,6 @@
 {
   "name": "llmasaservice-ui",
-  "version": "0.10.36",
+  "version": "0.10.37",
   "description": "Prebuilt UI components for LLMAsAService.io",
   "main": "dist/index.js",
   "module": "dist/index.mjs",
