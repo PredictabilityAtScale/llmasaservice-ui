@@ -509,6 +509,38 @@
   color: white;
 }
 
+.approve-tools-panel {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-small);
+  margin-top: var(--spacing-small);
+  padding: var(--spacing-small);
+  background-color: #FFFFE0;
+  border: 1px solid var(--button-border-color);
+  box-shadow: var(--button-drop-shadow);
+  margin-left: calc(-1 * var(--spacing-medium));
+  margin-right: calc(-1 * var(--spacing-medium));
+  color: black;
+
+}
+
+.approve-tools-header {
+  font-size: 0.75em;
+  text-align: center;
+}
+
+.approve-tools-button {
+  background-color: var(--button-background-color);
+  color: var(--button-text-color);
+  border: 1px solid var(--button-border-color);
+  border-radius: var(--border-radius);
+  padding: 5px 5px;
+  font-size: 0.8em;
+  cursor: pointer;
+  margin: var(--spacing-small);
+  box-shadow: var(--button-drop-shadow);
+}
+
 /* --------------------------------------------------------
    Form Error Styling
 -------------------------------------------------------- */

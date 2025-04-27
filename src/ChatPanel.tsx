@@ -16,7 +16,7 @@ import PrismStyle from "react-syntax-highlighter";
 import materialDark from "react-syntax-highlighter/dist/esm/styles/prism/material-dark.js";
 import materialLight from "react-syntax-highlighter/dist/esm/styles/prism/material-light.js";
 import EmailModal from "./EmailModal";
-import { MCPClient } from "./mcpClient";
+import ToolInfoModal from "./ToolInfoModal";
 
 export interface ChatPanelProps {
   project_id: string;
@@ -78,15 +78,15 @@ export interface ChatPanelProps {
   mcpServers?: [];
 }
 
-interface ExtraProps extends React.HTMLAttributes<HTMLElement> {
-  inline?: boolean;
+interface HistoryEntry {
+  content: string;
+  callId: string;
+  toolCalls?: any[]; // Array of tool call objects sent to LLM
+  toolResponses?: any[]; // Array of tool response objects received from tools/sent back to LLM
 }
 
-interface ToolItem {
-  name: string;
-  description: string;
-  parameters?: any;
-  input_schema?: any;
+interface ExtraProps extends React.HTMLAttributes<HTMLElement> {
+  inline?: boolean;
 }
 
 const ChatPanel: React.FC<ChatPanelProps & ExtraProps> = ({
@@ -141,9 +141,9 @@ const ChatPanel: React.FC<ChatPanelProps & ExtraProps> = ({
   const [nextPrompt, setNextPrompt] = useState("");
   const [lastController, setLastController] = useState(new AbortController());
   const [lastMessages, setLastMessages] = useState<any[]>([]);
-  const [history, setHistory] = useState<{
-    [prompt: string]: { content: string; callId: string };
-  }>(initialHistory);
+  const [history, setHistory] = useState<{ [prompt: string]: HistoryEntry }>(
+    initialHistory
+  );
   const [isLoading, setIsLoading] = useState(false);
   const [lastPrompt, setLastPrompt] = useState<string | null>(null);
   const [lastKey, setLastKey] = useState<string | null>(null);
@@ -152,6 +152,11 @@ const ChatPanel: React.FC<ChatPanelProps & ExtraProps> = ({
   const bottomPanelRef = useRef<HTMLDivElement | null>(null);
   const [isAtBottom, setIsAtBottom] = useState(true);
   const [isEmailModalOpen, setIsEmailModalOpen] = useState(false);
+  const [isToolInfoModalOpen, setIsToolInfoModalOpen] = useState(false);
+  const [toolInfoData, setToolInfoData] = useState<{
+    calls: any[];
+    responses: any[];
+  } | null>(null);
 
   const [currentConversation, setCurrentConversation] = useState<string | null>(
     conversation
@@ -286,63 +291,85 @@ const ChatPanel: React.FC<ChatPanelProps & ExtraProps> = ({
     publicAPIUrl = "https://8ftw8droff.execute-api.us-east-1.amazonaws.com/dev";
   }
 
-  //-------------------------------------------------------
-  // MCP Client
-  //-------------------------------------------------------
-  const [mcpClients, setMcpClients] = useState<MCPClient[]>([]);
-  const [convertedTools, setConvertedTools] = useState<any[]>([]);
+  const [toolList, setToolList] = useState<any[]>([]);
 
-  // mcp servers are passed in in the mcps prop. Create a client for each one
-  // store the clients in an array mcpClients
+  // mcp servers are passed in in the mcpServers prop. Fetch tools for each one.
   useEffect(() => {
-    const clients = (mcpServers ?? []).map(
-      (m: any) => new MCPClient(m.sseUrl, m.sseUrl, m.sseHeaders)
-    );
-    setMcpClients(clients);
-    return () => {
-      clients.forEach((c) => c.disconnect());
-    };
-  }, [mcpServers]);
+    console.log("MCP servers", mcpServers);
 
-  // once the clients are created, connect and get the tools
-  // store the converted formatted tools in the convertedTools state
-  useEffect(() => {
-    if (mcpClients.length === 0) return;
+    const fetchAndSetTools = async () => {
+      if (!mcpServers || mcpServers.length === 0) {
+        setToolList([]);
+        return;
+      }
 
-    (async () => {
-      const tools: ToolItem[] = [];
-      // Ensure each client is connected before calling listTools()
-      await Promise.all(
-        mcpClients.map(async (client) => {
+      try {
+        // Create an array of promises, one for each fetch call
+        const fetchPromises = (mcpServers ?? []).map(async (m: any) => {
+          const urlToFetch = `${publicAPIUrl}/tools/${encodeURIComponent(
+            m.url
+          )}`;
+          console.log(`Fetching tools from: ${urlToFetch}`);
           try {
-            // If not connected, call connect() again
-            await client.connect();
-            const list = await client.listTools();
-            console.log("listTools()", list);
-            const arr = Array.isArray(list) ? list : (list as any).tools ?? [];
-            arr.forEach((t: any) =>
-              tools.push({
-                name: t.name,
-                description: t.description || `Tool: ${t.name}`,
-                parameters: t.inputSchema,
-              })
+            const response = await fetch(urlToFetch);
+            if (!response.ok) {
+              console.error(
+                `Error fetching tools from ${m.url}: ${response.status} ${response.statusText}`
+              );
+              const errorBody = await response.text();
+              console.error(`Error body: ${errorBody}`);
+              return [];
+            }
+            const toolsFromServer = await response.json();
+            if (Array.isArray(toolsFromServer)) {
+              return toolsFromServer.map((tool) => ({
+                ...tool,
+                url: m.url,
+              }));
+            } else {
+              return [];
+            }
+          } catch (fetchError) {
+            console.error(
+              `Network or parsing error fetching tools from ${m.url}:`,
+              fetchError
             );
-          } catch (e) {
-            console.error("listTools() failed", e);
+            return [];
           }
-        })
-      );
+        });
 
-      setConvertedTools(tools);
-    })();
-  }, [mcpClients]);
+        // Wait for all fetch calls to complete
+        const results = await Promise.all(fetchPromises);
+
+        const allTools = results.flat();
+
+        console.log("Merged tools from all servers:", allTools);
+        setToolList(allTools);
+      } catch (error) {
+        console.error(
+          "An error occurred while processing tool fetches:",
+          error
+        );
+        setToolList([]); // Clear tools on overall error
+      }
+    };
+
+    fetchAndSetTools();
+  }, [mcpServers, publicAPIUrl]);
 
   const { send, response, idle, stop, lastCallId } = useLLM({
     project_id: project_id,
     customer: currentCustomer,
     url: url,
     agent: agent,
-    tools: convertedTools as [],
+    tools: toolList.map((item) => {
+      // remove the url from the tool list
+      return {
+        name: item.name,
+        description: item.description,
+        parameters: item.parameters,
+      };
+    }) as [],
   });
 
   useEffect(() => {
@@ -445,11 +472,13 @@ const ChatPanel: React.FC<ChatPanelProps & ExtraProps> = ({
   // 1. Add refs to track current values
   const lastKeyRef = useRef(lastKey);
   const lastMessagesRef = useRef(lastMessages);
-  const mcpClientsRef = useRef(mcpClients);
+  const toolListRef = useRef(toolList);
   const sendRef = useRef(send);
   const conversationRef = useRef(currentConversation);
   const lastControllerRef = useRef(lastController);
   const dataWithExtrasRef = useRef(dataWithExtras);
+  const currentHistoryRef = useRef(history);
+  const currentSetHistoryRef = useRef(setHistory);
 
   // 2. Keep refs updated with their respective state values
   useEffect(() => {
@@ -459,8 +488,8 @@ const ChatPanel: React.FC<ChatPanelProps & ExtraProps> = ({
     lastMessagesRef.current = lastMessages;
   }, [lastMessages]);
   useEffect(() => {
-    mcpClientsRef.current = mcpClients;
-  }, [mcpClients]);
+    toolListRef.current = toolList;
+  }, [toolList]);
   useEffect(() => {
     sendRef.current = send;
   }, [send]);
@@ -473,6 +502,13 @@ const ChatPanel: React.FC<ChatPanelProps & ExtraProps> = ({
   useEffect(() => {
     dataWithExtrasRef.current = dataWithExtras;
   }, [dataWithExtras]);
+  useEffect(() => {
+    currentHistoryRef.current = history;
+  }, [history]);
+  useEffect(() => {
+    currentSetHistoryRef.current = setHistory;
+  }, [setHistory]);
+
 
   const extractValue = (
     match: string,
@@ -686,13 +722,14 @@ const ChatPanel: React.FC<ChatPanelProps & ExtraProps> = ({
     const toolsToProcess = [...currentToolRequests];
     setPendingToolRequests([]);
     try {
-      // Get references to current state values through refs
-      const currentMcpClients = mcpClientsRef.current;
+      const currentToolList = toolListRef.current;
       const currentSend = sendRef.current;
       const refCurrentConversation = conversationRef.current;
       const currentLastController = lastControllerRef.current;
       const currentDataWithExtras = dataWithExtrasRef.current;
-      const initialPrompt = lastKeyRef.current ?? "";
+      const initialPromptKey = lastKeyRef.current ?? "";
+      const currentCurrentHistory = currentHistoryRef.current;
+      const currentCurrentSetHistory = currentSetHistoryRef.current;
 
       // Start with base messages including the user's original question
       const newMessages = [
@@ -701,7 +738,7 @@ const ChatPanel: React.FC<ChatPanelProps & ExtraProps> = ({
           content: [
             {
               type: "text",
-              text: initialPrompt,
+              text: initialPromptKey,
             },
           ],
         },
@@ -711,7 +748,7 @@ const ChatPanel: React.FC<ChatPanelProps & ExtraProps> = ({
       const toolCallsMessage = {
         role: "assistant",
         content: [],
-        tool_calls: [], // Will fill this with all tool calls
+        tool_calls: [],
       };
 
       // Parse all tool calls first
@@ -742,60 +779,142 @@ const ChatPanel: React.FC<ChatPanelProps & ExtraProps> = ({
       // Add the assistant message with all tool calls
       newMessages.push(toolCallsMessage);
 
-      // Process each tool and add responses one by one
+      const finalToolCalls = toolCallsMessage.tool_calls;
+
       const toolResponsePromises = parsedToolCalls.map(async (item) => {
         if (!item || !item.req) return null;
 
         const req = item.req;
         console.log(`Processing tool ${req.toolName}`);
 
-        // Find the client that can handle this tool
-        for (const client of currentMcpClients) {
-          if (client.toolExists(req.groups[1])) {
-            try {
-              let args;
-              try {
-                args = JSON.parse(req.groups[2]);
-              } catch (e) {
-                try {
-                  args = JSON.parse(req.groups[2].replace(/\\"/g, '"'));
-                } catch (err) {
-                  console.error("Failed to parse tool arguments:", err);
-                  return null;
-                }
-              }
-              const result = await client.callTool(req.groups[1], args);
+        const mcpTool = currentToolList.find(
+          (tool) => tool.name === req.toolName
+        );
 
-              if (
-                result &&
-                result.content &&
-                (result as any).content?.length > 0
-              ) {
-                const textResult = (result as any).content[0]?.text;
-                return {
-                  role: "tool",
-                  content: [
-                    {
-                      type: "text",
-                      text: textResult,
-                    },
-                  ],
-                  tool_call_id: req.groups[0],
-                };
-              }
-            } catch (error) {
-              console.error("Error calling tool:", error);
+        if (!mcpTool) {
+          console.error(`Tool ${req.toolName} not found in tool list`);
+          return null;
+        }
+
+        try {
+          let args;
+          try {
+            args = JSON.parse(req.groups[2]);
+          } catch (e) {
+            try {
+              args = JSON.parse(req.groups[2].replace(/\\"/g, '"'));
+            } catch (err) {
+              console.error("Failed to parse tool arguments:", err);
+              return null;
             }
           }
+
+          const body = {
+            tool: req.groups[1],
+            args: args,
+          };
+
+          const result = await fetch(
+            `${publicAPIUrl}/tools/${encodeURIComponent(mcpTool.url)}`,
+            {
+              method: "POST",
+              headers: {
+                "Content-Type": "application/json",
+              },
+              body: JSON.stringify(body),
+            }
+          );
+
+          if (!result.ok) {
+            console.error(
+              `Error calling tool ${req.toolName}: ${result.status} ${result.statusText}`
+            );
+            const errorBody = await result.text();
+            console.error(`Error body: ${errorBody}`);
+            return null;
+          }
+
+          let resultData;
+          try {
+            resultData = await result.json();
+          } catch (jsonError) {
+            console.error(
+              `Error parsing JSON response for tool ${req.toolName}:`,
+              jsonError
+            );
+            // Attempt to read as text for debugging if JSON fails
+            try {
+              const textBody = await result.text(); // Note: This consumes the body if json() failed early
+              console.error("Response body (text):", textBody);
+            } catch (textError) {
+              console.error(
+                "Failed to read response body as text either:",
+                textError
+              );
+            }
+            return null; // Exit if JSON parsing failed
+          }
+
+          console.log("tool result data", resultData);
+          if (
+            resultData &&
+            resultData.content &&
+            resultData.content.length > 0
+          ) {
+            const textResult = resultData.content[0]?.text;
+            return {
+              role: "tool",
+              content: [
+                {
+                  type: "text",
+                  text: textResult,
+                },
+              ],
+              tool_call_id: req.groups[0],
+            };
+          } else {
+            console.error(`No content returned from tool ${req.toolName}`);
+            return null;
+          }
+        } catch (error) {
+          console.error(`Error processing tool ${req.toolName}:`, error);
+          return null;
         }
-        return null;
       });
 
       // Wait for all tool responses
       const toolResponses = await Promise.all(toolResponsePromises);
+      const finalToolResponses = toolResponses.filter(Boolean); // Filter out nulls
+
+      console.log("Final tool calls", finalToolCalls);
+      console.log("Final tool responses", finalToolResponses);
+
+
+      if (initialPromptKey) {
+        currentCurrentSetHistory((prev) => {
+          // Ensure the entry exists before trying to update
+          const existingEntry = prev[initialPromptKey] || {
+            content: "",
+            callId: "",
+          };
+          
+          console.log("Existing history entry:", existingEntry);
+          console.log("Final tool calls in set:", finalToolCalls);
+          console.log("Final tool responses in set:", finalToolResponses);
+          
+          return {
+            ...prev,
+            [initialPromptKey]: {
+              ...existingEntry,
+              toolCalls: finalToolCalls,
+              toolResponses: finalToolResponses,
+            },
+          };
+        });
+      }
 
       // Add all valid tool responses to the messages
-      toolResponses.forEach((response) => {
+      finalToolResponses.forEach((response) => {
         if (response) {
           newMessages.push(response);
         }
@@ -914,34 +1033,24 @@ const ChatPanel: React.FC<ChatPanelProps & ExtraProps> = ({
       if (toolRequests.length > 0) {
         console.log("toolRequests", toolRequests);
         setPendingToolRequests(toolRequests);
-        const approveAllId = `approve-all-${lastCallId}`;
-        newResponse += `<br /><br /><button id="${approveAllId}" class="suggestion-button">${
-          toolRequests.length > 1
-            ? `Approve All ${toolRequests.length} Tools`
-            : "Approve Tool Use"
-        }</button>`;
-
-        // Add the onclick handler after rendering
-        setTimeout(() => {
-          const approveAllButton = document.getElementById(
-            approveAllId
-          ) as HTMLButtonElement;
-          if (approveAllButton) {
-            approveAllButton.onclick = () => {
-              approveAllButton.disabled = true;
-              approveAllButton.textContent = `Processing ${toolRequests.length} Tools...`;
-              processAllToolRequests();
-            };
-          }
-        }, 0);
       } else {
         setPendingToolRequests([]);
       }
 
       setHistory((prevHistory) => {
+        // Get any existing tool data from the previous state
+        const existingEntry = prevHistory[lastKey ?? ""] || {
+          content: "",
+          callId: "",
+        };
+        
         return {
           ...prevHistory,
-          [lastKey ?? ""]: { content: newResponse, callId: lastCallId },
+          [lastKey ?? ""]: { 
+            ...existingEntry, // This preserves toolCalls and toolResponses
+            content: newResponse, 
+            callId: lastCallId,
+          },
         };
       });
     }
@@ -1105,7 +1214,6 @@ const ChatPanel: React.FC<ChatPanelProps & ExtraProps> = ({
   };
 
   useEffect(() => {
-    // Helper to check if a value is empty
     const isEmpty = (value: string | undefined | null): boolean => {
       return !value || value.trim() === "" || value.trim() === "undefined";
     };
@@ -1418,9 +1526,6 @@ const ChatPanel: React.FC<ChatPanelProps & ExtraProps> = ({
     return html;
   };
 
-  //-------------------------------------------------------
-  // click event handlers and helpers
-  //-------------------------------------------------------
   const convertHistoryToHTML = (history: {
     [prompt: string]: { callId: string; content: string };
   }): string => {
@@ -1508,13 +1613,6 @@ const ChatPanel: React.FC<ChatPanelProps & ExtraProps> = ({
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
-  };
-
-  const shareViaEmail = (html: string, subject: string) => {
-    const mailtoLink = `mailto:?subject=${encodeURIComponent(
-      subject
-    )}&body=${encodeURIComponent(html)}`;
-    window.location.href = mailtoLink;
   };
 
   const handleSendEmail = (to: string, from: string) => {
@@ -1663,96 +1761,167 @@ const ChatPanel: React.FC<ChatPanelProps & ExtraProps> = ({
             </div>
           ) : null}
 
-          {Object.entries(history).map(([prompt, response], index) => (
-            <div className="history-entry" key={index}>
-              {hideInitialPrompt && index === 0 ? null : (
-                <div className="prompt">{formatPromptForDisplay(prompt)}</div>
-              )}
+          {Object.entries(history).map(([prompt, response], index) => {
+            const isLastEntry = index === Object.keys(history).length - 1;
+            const hasToolData = !!(
+              (response?.toolCalls?.length || 0) > 0 ||
+              (response?.toolResponses?.length || 0) > 0
+            );
 
-              <div className="response">
-                {index === Object.keys(history).length - 1 && isLoading ? (
-                  <div className="loading-text">
-                    thinking&nbsp;
-                    <div className="dot"></div>
-                    <div className="dot"></div>
-                    <div className="dot"></div>
-                  </div>
-                ) : null}
-                <ReactMarkdown
-                  className={markdownClass}
-                  remarkPlugins={[remarkGfm]}
-                  rehypePlugins={[rehypeRaw]}
-                  components={{ /*a: CustomLink,*/ code: CodeBlock }}
-                >
-                  {response.content}
-                </ReactMarkdown>
-                <div className="button-container">
-                  <button
-                    className="copy-button"
-                    onClick={() => {
-                      copyToClipboard(response.content);
-                    }}
-                    disabled={isDisabledDueToNoEmail()}
+            return (
+              <div className="history-entry" key={index}>
+                {hideInitialPrompt && index === 0 ? null : (
+                  <div className="prompt">{formatPromptForDisplay(prompt)}</div>
+                )}
+
+                <div className="response">
+                  {index === Object.keys(history).length - 1 && isLoading ? (
+                    <div className="loading-text">
+                      thinking&nbsp;
+                      <div className="dot"></div>
+                      <div className="dot"></div>
+                      <div className="dot"></div>
+                    </div>
+                  ) : null}
+                  <ReactMarkdown
+                    className={markdownClass}
+                    remarkPlugins={[remarkGfm]}
+                    rehypePlugins={[rehypeRaw]}
+                    components={{ /*a: CustomLink,*/ code: CodeBlock }}
                   >
-                    <svg
-                      xmlns="http://www.w3.org/2000/svg"
-                      viewBox="0 0 320 320"
-                      fill="currentColor"
-                      className="icon-svg"
+                    {response.content}
+                  </ReactMarkdown>
+
+                  {isLastEntry && pendingToolRequests.length > 0 && (
+                    <div className="approve-tools-panel">
+                      <div className="approve-tools-header">
+                        Tools need approval before use
+                      </div>
+
+                      <button
+                        className="approve-tools-button"
+                        onClick={() => {
+                          processAllToolRequests();
+                        }}
+                        disabled={isLoading}
+                      >
+                        {isLoading
+                          ? "Processing Tools..."
+                          : pendingToolRequests.length > 1
+                          ? `Approve ${pendingToolRequests.length} Tools`
+                          : "Approve Tool Use"}
+                      </button>
+                    </div>
+                  )}
+
+                  <div className="button-container">
+                    <button
+                      className="copy-button"
+                      onClick={() => {
+                        copyToClipboard(response.content);
+                      }}
+                      disabled={isDisabledDueToNoEmail()}
                     >
-                      <path
-                        d="M35,270h45v45c0,8.284,6.716,15,15,15h200c8.284,0,15-6.716,15-15V75c0-8.284-6.716-15-15-15h-45V15
+                      <svg
+                        xmlns="http://www.w3.org/2000/svg"
+                        viewBox="0 0 320 320"
+                        fill="currentColor"
+                        className="icon-svg"
+                      >
+                        <path
+                          d="M35,270h45v45c0,8.284,6.716,15,15,15h200c8.284,0,15-6.716,15-15V75c0-8.284-6.716-15-15-15h-45V15
 		c0-8.284-6.716-15-15-15H35c-8.284,0-15,6.716-15,15v240C20,263.284,26.716,270,35,270z M280,300H110V90h170V300z M50,30h170v30H95
 		c-8.284,0-15,6.716-15,15v165H50V30z"
-                      />
-                      <path d="M155,120c-8.284,0-15,6.716-15,15s6.716,15,15,15h80c8.284,0,15-6.716,15-15s-6.716-15-15-15H155z" />
-                      <path d="M235,180h-80c-8.284,0-15,6.716-15,15s6.716,15,15,15h80c8.284,0,15-6.716,15-15S243.284,180,235,180z" />
-                      <path
-                        d="M235,240h-80c-8.284,0-15,6.716-15,15c0,8.284,6.716,15,15,15h80c8.284,0,15-6.716,15-15C250,246.716,243.284,240,235,240z
+                        />
+                        <path d="M155,120c-8.284,0-15,6.716-15,15s6.716,15,15,15h80c8.284,0,15-6.716,15-15s-6.716-15-15-15H155z" />
+                        <path d="M235,180h-80c-8.284,0-15,6.716-15,15s6.716,15,15,15h80c8.284,0,15-6.716,15-15S243.284,180,235,180z" />
+                        <path
+                          d="M235,240h-80c-8.284,0-15,6.716-15,15c0,8.284,6.716,15,15,15h80c8.284,0,15-6.716,15-15C250,246.716,243.284,240,235,240z
 		"
-                      />
-                    </svg>
-                  </button>
+                        />
+                      </svg>
+                    </button>
 
-                  <button
-                    className="thumbs-button"
-                    onClick={() => {
-                      if (thumbsUpClick) thumbsUpClick(response.callId);
-                      interactionClicked(response.callId, "thumbsup");
-                    }}
-                    disabled={isDisabledDueToNoEmail()}
-                  >
-                    <svg
-                      xmlns="http://www.w3.org/2000/svg"
-                      viewBox="0 0 20 20"
-                      fill="currentColor"
-                      className="icon-svg"
+                    <button
+                      className="thumbs-button"
+                      onClick={() => {
+                        if (thumbsUpClick) thumbsUpClick(response.callId);
+                        interactionClicked(response.callId, "thumbsup");
+                      }}
+                      disabled={isDisabledDueToNoEmail()}
                     >
-                      <path d="M20.22 9.55C19.79 9.04 19.17 8.75 18.5 8.75H14.47V6C14.47 4.48 13.24 3.25 11.64 3.25C10.94 3.25 10.31 3.67 10.03 4.32L7.49 10.25H5.62C4.31 10.25 3.25 11.31 3.25 12.62V18.39C3.25 19.69 4.32 20.75 5.62 20.75H17.18C18.27 20.75 19.2 19.97 19.39 18.89L20.71 11.39C20.82 10.73 20.64 10.06 20.21 9.55H20.22ZM5.62 19.25C5.14 19.25 4.75 18.86 4.75 18.39V12.62C4.75 12.14 5.14 11.75 5.62 11.75H7.23V19.25H5.62ZM17.92 18.63C17.86 18.99 17.55 19.25 17.18 19.25H8.74V11.15L11.41 4.9C11.45 4.81 11.54 4.74 11.73 4.74C12.42 4.74 12.97 5.3 12.97 5.99V10.24H18.5C18.73 10.24 18.93 10.33 19.07 10.5C19.21 10.67 19.27 10.89 19.23 11.12L17.91 18.62L17.92 18.63Z" />
-                    </svg>
-                  </button>
+                      <svg
+                        xmlns="http://www.w3.org/2000/svg"
+                        viewBox="0 0 20 20"
+                        fill="currentColor"
+                        className="icon-svg"
+                      >
+                        <path d="M20.22 9.55C19.79 9.04 19.17 8.75 18.5 8.75H14.47V6C14.47 4.48 13.24 3.25 11.64 3.25C10.94 3.25 10.31 3.67 10.03 4.32L7.49 10.25H5.62C4.31 10.25 3.25 11.31 3.25 12.62V18.39C3.25 19.69 4.32 20.75 5.62 20.75H17.18C18.27 20.75 19.2 19.97 19.39 18.89L20.71 11.39C20.82 10.73 20.64 10.06 20.21 9.55H20.22ZM5.62 19.25C5.14 19.25 4.75 18.86 4.75 18.39V12.62C4.75 12.14 5.14 11.75 5.62 11.75H7.23V19.25H5.62ZM17.92 18.63C17.86 18.99 17.55 19.25 17.18 19.25H8.74V11.15L11.41 4.9C11.45 4.81 11.54 4.74 11.73 4.74C12.42 4.74 12.97 5.3 12.97 5.99V10.24H18.5C18.73 10.24 18.93 10.33 19.07 10.5C19.21 10.67 19.27 10.89 19.23 11.12L17.91 18.62L17.92 18.63Z" />
+                      </svg>
+                    </button>
 
-                  <button
-                    className="thumbs-button"
-                    onClick={() => {
-                      if (thumbsDownClick) thumbsDownClick(response.callId);
-                      interactionClicked(response.callId, "thumbsdown");
-                    }}
-                    disabled={isDisabledDueToNoEmail()}
-                  >
-                    <svg
-                      xmlns="http://www.w3.org/2000/svg"
-                      viewBox="0 0 20 20"
-                      fill="currentColor"
-                      className="icon-svg"
+                    <button
+                      className="thumbs-button"
+                      onClick={() => {
+                        if (thumbsDownClick) thumbsDownClick(response.callId);
+                        interactionClicked(response.callId, "thumbsdown");
+                      }}
+                      disabled={isDisabledDueToNoEmail()}
                     >
-                      <path d="M18.38 3.25H6.81C5.72 3.25 4.79 4.03 4.6 5.11L3.29 12.61C3.18 13.27 3.36 13.94 3.78 14.45C4.21 14.96 4.83 15.25 5.5 15.25H9.53V18C9.53 19.52 10.76 20.75 12.36 20.75C13.06 20.75 13.69 20.33 13.97 19.68L16.51 13.75H18.39C19.7 13.75 20.76 12.69 20.76 11.38V5.61C20.76 4.31 19.7 3.25 18.39 3.25H18.38ZM15.26 12.85L12.59 19.1C12.55 19.19 12.46 19.26 12.27 19.26C11.58 19.26 11.03 18.7 11.03 18.01V13.76H5.5C5.27 13.76 5.07 13.67 4.93 13.5C4.78 13.33 4.73 13.11 4.77 12.88L6.08 5.38C6.14 5.02 6.45001 4.76 6.82 4.76H15.26V12.85ZM19.25 11.38C19.25 11.86 18.86 12.25 18.38 12.25H16.77V4.75H18.38C18.86 4.75 19.25 5.14 19.25 5.61V11.38Z" />
-                    </svg>
-                  </button>
+                      <svg
+                        xmlns="http://www.w3.org/2000/svg"
+                        viewBox="0 0 20 20"
+                        fill="currentColor"
+                        className="icon-svg"
+                      >
+                        <path d="M18.38 3.25H6.81C5.72 3.25 4.79 4.03 4.6 5.11L3.29 12.61C3.18 13.27 3.36 13.94 3.78 14.45C4.21 14.96 4.83 15.25 5.5 15.25H9.53V18C9.53 19.52 10.76 20.75 12.36 20.75C13.06 20.75 13.69 20.33 13.97 19.68L16.51 13.75H18.39C19.7 13.75 20.76 12.69 20.76 11.38V5.61C20.76 4.31 19.7 3.25 18.39 3.25H18.38ZM15.26 12.85L12.59 19.1C12.55 19.19 12.46 19.26 12.27 19.26C11.58 19.26 11.03 18.7 11.03 18.01V13.76H5.5C5.27 13.76 5.07 13.67 4.93 13.5C4.78 13.33 4.73 13.11 4.77 12.88L6.08 5.38C6.14 5.02 6.45001 4.76 6.82 4.76H15.26V12.85ZM19.25 11.38C19.25 11.86 18.86 12.25 18.38 12.25H16.77V4.75H18.38C18.86 4.75 19.25 5.14 19.25 5.61V11.38Z" />
+                      </svg>
+                    </button>
+
+                    {(idle || hasToolData) && (
+                      <button
+                        className="copy-button"
+                        title="Show Tool Call/Response JSON"
+                        onClick={() => {
+                          // Get the current history entry's tool data directly
+                          const historyEntry = history[prompt];
+
+
+                          console.log("Tool info for prompt:", prompt);
+                          console.log("History entry:", historyEntry);
+                          console.log("Tool calls:", historyEntry?.toolCalls);
+                          console.log("Tool responses:", historyEntry?.toolResponses);
+
+                          console.log("history", JSON.stringify(history, null, 2));
+
+                          setToolInfoData({
+                            calls: historyEntry?.toolCalls ?? [],
+                            responses: historyEntry?.toolResponses ?? [],
+                          });
+                          setIsToolInfoModalOpen(true);
+                        }}
+                      >
+                        <svg
+                          xmlns="http://www.w3.org/2000/svg"
+                          viewBox="0 0 24 24"
+                          fill="currentColor"
+                          className="icon-svg"
+                        >
+                          <path d="M9.4 16.6L4.8 12l4.6-4.6L8 6l-6 6 6 6 1.4-1.4zm5.2 0l4.6-4.6-4.6-4.6L16 6l6 6-6 6-1.4-1.4z" />
+                        </svg>
+                      </button>
+                    )}
+                  </div>
                 </div>
               </div>
-            </div>
-          ))}
+            );
+          })}
+          <ToolInfoModal
+            isOpen={isToolInfoModalOpen}
+            onClose={() => setIsToolInfoModalOpen(false)}
+            data={toolInfoData}
+          />
+
           {followOnQuestionsState &&
             followOnQuestionsState.length > 0 &&
             idle && (

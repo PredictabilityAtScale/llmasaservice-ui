@@ -1,5 +1,6 @@
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { SSEClientTransport } from "@modelcontextprotocol/sdk/client/sse.js";
+import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/streamableHttp.js";
 
 /*
 reference: https://github.com/cyanheads/model-context-protocol-resources/blob/main/guides/mcp-client-development-guide.md
@@ -7,12 +8,21 @@ reference: https://github.com/cyanheads/model-context-protocol-resources/blob/ma
 
 export class MCPClient {
   private client: Client;
-  private transport: SSEClientTransport;
+  private transport: SSEClientTransport | StreamableHTTPClientTransport;
   private headers: [];
   public tools: any[] = [];
 
-  constructor(name: string, url: string, headers: [] = []) {
-    this.transport = new SSEClientTransport(new URL(url));
+  constructor(name: string, transport: string, url: string, headers: [] = []) {
+    switch (transport.toLowerCase()) {
+      case "sse":
+        this.transport = new SSEClientTransport(new URL(url));
+        break;
+      case "http":
+        this.transport = new StreamableHTTPClientTransport(new URL(url));
+        break;
+      default:
+        this.transport = new StreamableHTTPClientTransport(new URL(url));
+    }
 
     this.client = new Client(
       {
