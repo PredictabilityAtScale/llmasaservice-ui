@@ -554,6 +554,10 @@
   margin-top: var(--spacing-small);
 }
 
+/* --------------------------------------------------------
+   Thinking Animation
+-------------------------------------------------------- */
+
 .loading-text {
   display: flex;
   align-items: center;
@@ -593,6 +597,10 @@
   }
 }
 
+/* --------------------------------------------------------
+    Approve All tools panel
+-------------------------------------------------------- */
+
 .llm-panel .approve-all-button {
   background-color: var(--button-background-color-hover);
   color: var(--button-text-color-hover);
@@ -610,4 +618,88 @@
 .llm-panel .approve-all-button:hover {
   filter: brightness(1.1);
   transform: translateY(-1px);
+}
+
+/* --------------------------------------------------------
+   Tool Info Modal
+-------------------------------------------------------- */
+/* Modal overlay - already covered */
+.modal-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100vw;
+  height: 100vh;
+  background-color: rgba(0, 0, 0, 0.5);
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  z-index: 1000;
+}
+
+/* Tool info modal content - exact match for inline styles */
+.tool-info-modal-content {
+  width: 90vw;
+  height: 90vh;
+  max-width: 90vw;
+  max-height: 90vh;
+  display: flex;
+  flex-direction: column;
+  background-color: white;
+  padding: 20px;
+  border-radius: 8px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+  position: relative;
+  color: #333;
+}
+
+/* Content container for the two panels */
+.tool-info-container {
+  display: flex;
+  flex-grow: 1;
+  flex-direction: row;
+  gap: 0;
+  margin: 0;
+  padding: 0;
+}
+
+/* Tool info section */
+.tool-info-section {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  padding: 10px;
+  background-color: white;
+}
+
+/* Tool info JSON textarea */
+.tool-info-json {
+  width: 100%;
+  height: 100%;
+  overflow: auto;
+  resize: none;
+  background-color: #f5f5f5;
+  border: 1px solid #ccc;
+  border-radius: 4px;
+  padding: 8px;
+  font-family: monospace;
+  flex-grow: 1;
+}
+
+/* Modal buttons container */
+.modal-buttons {
+  display: flex;
+  justify-content: flex-end;
+  margin-top: 10px;
+}
+
+/* Button styling */
+.modal-buttons button {
+  padding: 8px 16px;
+  margin-left: 8px;
+  border: none;
+  border-radius: 4px;
+  background-color: #007bff;
+  color: white;
+  cursor: pointer;
 }

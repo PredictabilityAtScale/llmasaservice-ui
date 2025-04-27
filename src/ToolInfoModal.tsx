@@ -14,28 +14,29 @@ const ToolInfoModal: React.FC<ToolInfoModalProps> = ({
 }) => {
   if (!isOpen || !data) return null;
 
-  useEffect(() => {
-    console.log("data", data);
-  }, [data]);
-
   return (
     <div className="modal-overlay" onClick={onClose}>
       <div
         className="modal-content tool-info-modal-content"
         onClick={(e) => e.stopPropagation()}
       >
-        <h4>Tool Interaction Details</h4>
-        <div className="tool-info-section">
-          <h5>Tool Calls (Sent to LLM)</h5>
-          <pre className="tool-info-json">
-            {JSON.stringify(data.calls, null, 2)}
-          </pre>
-        </div>
-        <div className="tool-info-section">
-          <h5>Tool Responses (Received from Tools)</h5>
-          <pre className="tool-info-json">
-            {JSON.stringify(data.responses, null, 2)}
-          </pre>
+        <div className="tool-info-container">
+          <div className="tool-info-section">
+            <b>Tool Calls</b>
+            <textarea
+              className="tool-info-json"
+              readOnly
+              value={JSON.stringify(data.calls, null, 2)}
+            />
+          </div>
+          <div className="tool-info-section">
+            <b>Tool Responses</b>
+            <textarea
+              className="tool-info-json"
+              readOnly
+              value={JSON.stringify(data.responses, null, 2)}
+            />
+          </div>
         </div>
         <div className="modal-buttons">
           <button onClick={onClose}>Close</button>

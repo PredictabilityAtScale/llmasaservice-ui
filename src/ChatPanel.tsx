@@ -81,8 +81,8 @@ export interface ChatPanelProps {
 interface HistoryEntry {
   content: string;
   callId: string;
-  toolCalls?: any[]; // Array of tool call objects sent to LLM
-  toolResponses?: any[]; // Array of tool response objects received from tools/sent back to LLM
+  toolCalls?: [];
+  toolResponses?: [];
 }
 
 interface ExtraProps extends React.HTMLAttributes<HTMLElement> {
@@ -469,47 +469,6 @@ const ChatPanel: React.FC<ChatPanelProps & ExtraProps> = ({
     };
   }, [cssUrl]);
 
-  // 1. Add refs to track current values
-  const lastKeyRef = useRef(lastKey);
-  const lastMessagesRef = useRef(lastMessages);
-  const toolListRef = useRef(toolList);
-  const sendRef = useRef(send);
-  const conversationRef = useRef(currentConversation);
-  const lastControllerRef = useRef(lastController);
-  const dataWithExtrasRef = useRef(dataWithExtras);
-  const currentHistoryRef = useRef(history);
-  const currentSetHistoryRef = useRef(setHistory);
-
-  // 2. Keep refs updated with their respective state values
-  useEffect(() => {
-    lastKeyRef.current = lastKey;
-  }, [lastKey]);
-  useEffect(() => {
-    lastMessagesRef.current = lastMessages;
-  }, [lastMessages]);
-  useEffect(() => {
-    toolListRef.current = toolList;
-  }, [toolList]);
-  useEffect(() => {
-    sendRef.current = send;
-  }, [send]);
-  useEffect(() => {
-    conversationRef.current = currentConversation;
-  }, [currentConversation]);
-  useEffect(() => {
-    lastControllerRef.current = lastController;
-  }, [lastController]);
-  useEffect(() => {
-    dataWithExtrasRef.current = dataWithExtras;
-  }, [dataWithExtras]);
-  useEffect(() => {
-    currentHistoryRef.current = history;
-  }, [history]);
-  useEffect(() => {
-    currentSetHistoryRef.current = setHistory;
-  }, [setHistory]);
-
-
   const extractValue = (
     match: string,
     groups: any[] = [],
@@ -722,15 +681,6 @@ const ChatPanel: React.FC<ChatPanelProps & ExtraProps> = ({
     const toolsToProcess = [...currentToolRequests];
     setPendingToolRequests([]);
     try {
-      const currentToolList = toolListRef.current;
-      const currentSend = sendRef.current;
-      const refCurrentConversation = conversationRef.current;
-      const currentLastController = lastControllerRef.current;
-      const currentDataWithExtras = dataWithExtrasRef.current;
-      const initialPromptKey = lastKeyRef.current ?? "";
-      const currentCurrentHistory = currentHistoryRef.current;
-      const currentCurrentSetHistory = currentSetHistoryRef.current;
-
       // Start with base messages including the user's original question
       const newMessages = [
         {
@@ -738,7 +688,7 @@ const ChatPanel: React.FC<ChatPanelProps & ExtraProps> = ({
           content: [
             {
               type: "text",
-              text: initialPromptKey,
+              text: lastKey,
             },
           ],
         },
@@ -787,9 +737,7 @@ const ChatPanel: React.FC<ChatPanelProps & ExtraProps> = ({
         const req = item.req;
         console.log(`Processing tool ${req.toolName}`);
 
-        const mcpTool = currentToolList.find(
-          (tool) => tool.name === req.toolName
-        );
+        const mcpTool = toolList.find((tool) => tool.name === req.toolName);
 
         if (!mcpTool) {
           console.error(`Tool ${req.toolName} not found in tool list`);
@@ -884,50 +832,42 @@ const ChatPanel: React.FC<ChatPanelProps & ExtraProps> = ({
 
       // Wait for all tool responses
       const toolResponses = await Promise.all(toolResponsePromises);
-      const finalToolResponses = toolResponses.filter(Boolean); // Filter out nulls
+      const finalToolResponses = toolResponses.filter(Boolean); // Filter out null
 
-      console.log("Final tool calls", finalToolCalls);
-      console.log("Final tool responses", finalToolResponses);
+      if (lastKey) {
+        setHistory((prev) => {
+          const existingEntry = prev[lastKey] || {};
 
-
-      if (initialPromptKey) {
-        currentCurrentSetHistory((prev) => {
-          // Ensure the entry exists before trying to update
-          const existingEntry = prev[initialPromptKey] || {
-            content: "",
-            callId: "",
-          };
-          
-          console.log("Existing history entry:", existingEntry);
-          console.log("Final tool calls in set:", finalToolCalls);
-          console.log("Final tool responses in set:", finalToolResponses);
-          
           return {
             ...prev,
-            [initialPromptKey]: {
+            [lastKey]: {
               ...existingEntry,
-              toolCalls: finalToolCalls,
-              toolResponses: finalToolResponses,
+              toolCalls: [
+                ...((existingEntry as any).toolCalls || []),
+                ...finalToolCalls,
+              ],
+              toolResponses: [
+                ...((existingEntry as any).toolResponses || []),
+                ...finalToolResponses,
+              ],
             },
-          };
+          } as any;
         });
       }
 
-      // Add all valid tool responses to the messages
       finalToolResponses.forEach((response) => {
         if (response) {
           newMessages.push(response);
         }
       });
 
-      // 4. Finally send the complete message structure to the LLM
       console.log("Sending final messages with all tool results:", newMessages);
 
-      currentSend(
+      send(
         "",
         newMessages as any,
         [
-          ...currentDataWithExtras(),
+          ...dataWithExtras(),
           {
             key: "--messages",
             data: newMessages.length.toString(),
@@ -936,8 +876,8 @@ const ChatPanel: React.FC<ChatPanelProps & ExtraProps> = ({
         true,
         true,
         service,
-        refCurrentConversation,
-        currentLastController
+        currentConversation,
+        lastController
       );
     } catch (error) {
       console.error("Error in processing all tools:", error);
@@ -1043,12 +983,12 @@ const ChatPanel: React.FC<ChatPanelProps & ExtraProps> = ({
           content: "",
           callId: "",
         };
-        
+
         return {
           ...prevHistory,
-          [lastKey ?? ""]: { 
+          [lastKey ?? ""]: {
             ...existingEntry, // This preserves toolCalls and toolResponses
-            content: newResponse, 
+            content: newResponse,
             callId: lastCallId,
           },
         };
@@ -1814,104 +1754,96 @@ const ChatPanel: React.FC<ChatPanelProps & ExtraProps> = ({
                     </div>
                   )}
 
-                  <div className="button-container">
-                    <button
-                      className="copy-button"
-                      onClick={() => {
-                        copyToClipboard(response.content);
-                      }}
-                      disabled={isDisabledDueToNoEmail()}
-                    >
-                      <svg
-                        xmlns="http://www.w3.org/2000/svg"
-                        viewBox="0 0 320 320"
-                        fill="currentColor"
-                        className="icon-svg"
-                      >
-                        <path
-                          d="M35,270h45v45c0,8.284,6.716,15,15,15h200c8.284,0,15-6.716,15-15V75c0-8.284-6.716-15-15-15h-45V15
-		c0-8.284-6.716-15-15-15H35c-8.284,0-15,6.716-15,15v240C20,263.284,26.716,270,35,270z M280,300H110V90h170V300z M50,30h170v30H95
-		c-8.284,0-15,6.716-15,15v165H50V30z"
-                        />
-                        <path d="M155,120c-8.284,0-15,6.716-15,15s6.716,15,15,15h80c8.284,0,15-6.716,15-15s-6.716-15-15-15H155z" />
-                        <path d="M235,180h-80c-8.284,0-15,6.716-15,15s6.716,15,15,15h80c8.284,0,15-6.716,15-15S243.284,180,235,180z" />
-                        <path
-                          d="M235,240h-80c-8.284,0-15,6.716-15,15c0,8.284,6.716,15,15,15h80c8.284,0,15-6.716,15-15C250,246.716,243.284,240,235,240z
-		"
-                        />
-                      </svg>
-                    </button>
-
-                    <button
-                      className="thumbs-button"
-                      onClick={() => {
-                        if (thumbsUpClick) thumbsUpClick(response.callId);
-                        interactionClicked(response.callId, "thumbsup");
-                      }}
-                      disabled={isDisabledDueToNoEmail()}
-                    >
-                      <svg
-                        xmlns="http://www.w3.org/2000/svg"
-                        viewBox="0 0 20 20"
-                        fill="currentColor"
-                        className="icon-svg"
-                      >
-                        <path d="M20.22 9.55C19.79 9.04 19.17 8.75 18.5 8.75H14.47V6C14.47 4.48 13.24 3.25 11.64 3.25C10.94 3.25 10.31 3.67 10.03 4.32L7.49 10.25H5.62C4.31 10.25 3.25 11.31 3.25 12.62V18.39C3.25 19.69 4.32 20.75 5.62 20.75H17.18C18.27 20.75 19.2 19.97 19.39 18.89L20.71 11.39C20.82 10.73 20.64 10.06 20.21 9.55H20.22ZM5.62 19.25C5.14 19.25 4.75 18.86 4.75 18.39V12.62C4.75 12.14 5.14 11.75 5.62 11.75H7.23V19.25H5.62ZM17.92 18.63C17.86 18.99 17.55 19.25 17.18 19.25H8.74V11.15L11.41 4.9C11.45 4.81 11.54 4.74 11.73 4.74C12.42 4.74 12.97 5.3 12.97 5.99V10.24H18.5C18.73 10.24 18.93 10.33 19.07 10.5C19.21 10.67 19.27 10.89 19.23 11.12L17.91 18.62L17.92 18.63Z" />
-                      </svg>
-                    </button>
-
-                    <button
-                      className="thumbs-button"
-                      onClick={() => {
-                        if (thumbsDownClick) thumbsDownClick(response.callId);
-                        interactionClicked(response.callId, "thumbsdown");
-                      }}
-                      disabled={isDisabledDueToNoEmail()}
-                    >
-                      <svg
-                        xmlns="http://www.w3.org/2000/svg"
-                        viewBox="0 0 20 20"
-                        fill="currentColor"
-                        className="icon-svg"
-                      >
-                        <path d="M18.38 3.25H6.81C5.72 3.25 4.79 4.03 4.6 5.11L3.29 12.61C3.18 13.27 3.36 13.94 3.78 14.45C4.21 14.96 4.83 15.25 5.5 15.25H9.53V18C9.53 19.52 10.76 20.75 12.36 20.75C13.06 20.75 13.69 20.33 13.97 19.68L16.51 13.75H18.39C19.7 13.75 20.76 12.69 20.76 11.38V5.61C20.76 4.31 19.7 3.25 18.39 3.25H18.38ZM15.26 12.85L12.59 19.1C12.55 19.19 12.46 19.26 12.27 19.26C11.58 19.26 11.03 18.7 11.03 18.01V13.76H5.5C5.27 13.76 5.07 13.67 4.93 13.5C4.78 13.33 4.73 13.11 4.77 12.88L6.08 5.38C6.14 5.02 6.45001 4.76 6.82 4.76H15.26V12.85ZM19.25 11.38C19.25 11.86 18.86 12.25 18.38 12.25H16.77V4.75H18.38C18.86 4.75 19.25 5.14 19.25 5.61V11.38Z" />
-                      </svg>
-                    </button>
-
-                    {(idle || hasToolData) && (
+                  {idle && !isLoading && pendingToolRequests.length === 0 && (
+                    <div className="button-container">
                       <button
                         className="copy-button"
-                        title="Show Tool Call/Response JSON"
                         onClick={() => {
-                          // Get the current history entry's tool data directly
-                          const historyEntry = history[prompt];
-
-
-                          console.log("Tool info for prompt:", prompt);
-                          console.log("History entry:", historyEntry);
-                          console.log("Tool calls:", historyEntry?.toolCalls);
-                          console.log("Tool responses:", historyEntry?.toolResponses);
-
-                          console.log("history", JSON.stringify(history, null, 2));
-
-                          setToolInfoData({
-                            calls: historyEntry?.toolCalls ?? [],
-                            responses: historyEntry?.toolResponses ?? [],
-                          });
-                          setIsToolInfoModalOpen(true);
+                          copyToClipboard(response.content);
                         }}
+                        disabled={isDisabledDueToNoEmail()}
                       >
                         <svg
                           xmlns="http://www.w3.org/2000/svg"
-                          viewBox="0 0 24 24"
+                          viewBox="0 0 320 320"
                           fill="currentColor"
                           className="icon-svg"
                         >
-                          <path d="M9.4 16.6L4.8 12l4.6-4.6L8 6l-6 6 6 6 1.4-1.4zm5.2 0l4.6-4.6-4.6-4.6L16 6l6 6-6 6-1.4-1.4z" />
+                          <path
+                            d="M35,270h45v45c0,8.284,6.716,15,15,15h200c8.284,0,15-6.716,15-15V75c0-8.284-6.716-15-15-15h-45V15
+		c0-8.284-6.716-15-15-15H35c-8.284,0-15,6.716-15,15v240C20,263.284,26.716,270,35,270z M280,300H110V90h170V300z M50,30h170v30H95
+		c-8.284,0-15,6.716-15,15v165H50V30z"
+                          />
+                          <path d="M155,120c-8.284,0-15,6.716-15,15s6.716,15,15,15h80c8.284,0,15-6.716,15-15s-6.716-15-15-15H155z" />
+                          <path d="M235,180h-80c-8.284,0-15,6.716-15,15s6.716,15,15,15h80c8.284,0,15-6.716,15-15S243.284,180,235,180z" />
+                          <path
+                            d="M235,240h-80c-8.284,0-15,6.716-15,15c0,8.284,6.716,15,15,15h80c8.284,0,15-6.716,15-15C250,246.716,243.284,240,235,240z
+		"
+                          />
                         </svg>
                       </button>
-                    )}
-                  </div>
+
+                      <button
+                        className="thumbs-button"
+                        onClick={() => {
+                          if (thumbsUpClick) thumbsUpClick(response.callId);
+                          interactionClicked(response.callId, "thumbsup");
+                        }}
+                        disabled={isDisabledDueToNoEmail()}
+                      >
+                        <svg
+                          xmlns="http://www.w3.org/2000/svg"
+                          viewBox="0 0 20 20"
+                          fill="currentColor"
+                          className="icon-svg"
+                        >
+                          <path d="M20.22 9.55C19.79 9.04 19.17 8.75 18.5 8.75H14.47V6C14.47 4.48 13.24 3.25 11.64 3.25C10.94 3.25 10.31 3.67 10.03 4.32L7.49 10.25H5.62C4.31 10.25 3.25 11.31 3.25 12.62V18.39C3.25 19.69 4.32 20.75 5.62 20.75H17.18C18.27 20.75 19.2 19.97 19.39 18.89L20.71 11.39C20.82 10.73 20.64 10.06 20.21 9.55H20.22ZM5.62 19.25C5.14 19.25 4.75 18.86 4.75 18.39V12.62C4.75 12.14 5.14 11.75 5.62 11.75H7.23V19.25H5.62ZM17.92 18.63C17.86 18.99 17.55 19.25 17.18 19.25H8.74V11.15L11.41 4.9C11.45 4.81 11.54 4.74 11.73 4.74C12.42 4.74 12.97 5.3 12.97 5.99V10.24H18.5C18.73 10.24 18.93 10.33 19.07 10.5C19.21 10.67 19.27 10.89 19.23 11.12L17.91 18.62L17.92 18.63Z" />
+                        </svg>
+                      </button>
+
+                      <button
+                        className="thumbs-button"
+                        onClick={() => {
+                          if (thumbsDownClick) thumbsDownClick(response.callId);
+                          interactionClicked(response.callId, "thumbsdown");
+                        }}
+                        disabled={isDisabledDueToNoEmail()}
+                      >
+                        <svg
+                          xmlns="http://www.w3.org/2000/svg"
+                          viewBox="0 0 20 20"
+                          fill="currentColor"
+                          className="icon-svg"
+                        >
+                          <path d="M18.38 3.25H6.81C5.72 3.25 4.79 4.03 4.6 5.11L3.29 12.61C3.18 13.27 3.36 13.94 3.78 14.45C4.21 14.96 4.83 15.25 5.5 15.25H9.53V18C9.53 19.52 10.76 20.75 12.36 20.75C13.06 20.75 13.69 20.33 13.97 19.68L16.51 13.75H18.39C19.7 13.75 20.76 12.69 20.76 11.38V5.61C20.76 4.31 19.7 3.25 18.39 3.25H18.38ZM15.26 12.85L12.59 19.1C12.55 19.19 12.46 19.26 12.27 19.26C11.58 19.26 11.03 18.7 11.03 18.01V13.76H5.5C5.27 13.76 5.07 13.67 4.93 13.5C4.78 13.33 4.73 13.11 4.77 12.88L6.08 5.38C6.14 5.02 6.45001 4.76 6.82 4.76H15.26V12.85ZM19.25 11.38C19.25 11.86 18.86 12.25 18.38 12.25H16.77V4.75H18.38C18.86 4.75 19.25 5.14 19.25 5.61V11.38Z" />
+                        </svg>
+                      </button>
+
+                      {(idle || hasToolData) && (
+                        <button
+                          className="copy-button"
+                          title="Show Tool Call/Response JSON"
+                          onClick={() => {
+                            const historyEntry = history[prompt];
+                            setToolInfoData({
+                              calls: historyEntry?.toolCalls ?? [],
+                              responses: historyEntry?.toolResponses ?? [],
+                            });
+                            setIsToolInfoModalOpen(true);
+                          }}
+                        >
+                          <svg
+                            xmlns="http://www.w3.org/2000/svg"
+                            viewBox="0 0 24 24"
+                            fill="currentColor"
+                            className="icon-svg"
+                          >
+                            <path d="M9.4 16.6L4.8 12l4.6-4.6L8 6l-6 6 6 6 1.4-1.4zm5.2 0l4.6-4.6-4.6-4.6L16 6l6 6-6 6-1.4-1.4z" />
+                          </svg>
+                        </button>
+                      )}
+                    </div>
+                  )}
                 </div>
               </div>
             );
@@ -1924,7 +1856,9 @@ const ChatPanel: React.FC<ChatPanelProps & ExtraProps> = ({
 
           {followOnQuestionsState &&
             followOnQuestionsState.length > 0 &&
-            idle && (
+            idle &&
+            !isLoading &&
+            pendingToolRequests.length === 0 && (
               <div className="suggestions-container">
                 {followOnQuestionsState.map((question, index) => (
                   <button
