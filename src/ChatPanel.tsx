@@ -200,6 +200,26 @@ const ChatPanel: React.FC<ChatPanelProps & ExtraProps> = ({
   const [followOnQuestionsState, setFollowOnQuestionsState] =
     useState(followOnQuestions);
 
+  // new per‐tool approval state
+  const [sessionApprovedTools, setSessionApprovedTools] = useState<string[]>(
+    []
+  );
+  const [alwaysApprovedTools, setAlwaysApprovedTools] = useState<string[]>([]);
+
+  // load “always” approvals
+  useEffect(() => {
+    const stored = localStorage.getItem("alwaysApprovedTools");
+    if (stored) setAlwaysApprovedTools(JSON.parse(stored));
+  }, []);
+
+  // persist “always” approvals
+  useEffect(() => {
+    localStorage.setItem(
+      "alwaysApprovedTools",
+      JSON.stringify(alwaysApprovedTools)
+    );
+  }, [alwaysApprovedTools]);
+
   useEffect(() => {
     if (followOnQuestions !== followOnQuestionsState) {
       setFollowOnQuestionsState(followOnQuestions);
@@ -670,15 +690,18 @@ const ChatPanel: React.FC<ChatPanelProps & ExtraProps> = ({
     pendingToolRequestsRef.current = pendingToolRequests;
   }, [pendingToolRequests]);
 
-  const processAllToolRequests = async () => {
-    const currentToolRequests = pendingToolRequestsRef.current;
-    console.log("processAllToolRequests", currentToolRequests);
+  const processGivenToolRequests = async (
+    requests: typeof pendingToolRequests
+  ) => {
+    if (!requests || requests.length === 0)
+      requests = pendingToolRequestsRef.current;
 
-    if (currentToolRequests.length === 0) return;
+    if (requests.length === 0) return;
 
+    console.log("processGivenToolRequests", requests);
     setIsLoading(true);
 
-    const toolsToProcess = [...currentToolRequests];
+    const toolsToProcess = [...requests];
     setPendingToolRequests([]);
     try {
       // Start with base messages including the user's original question
@@ -768,6 +791,11 @@ const ChatPanel: React.FC<ChatPanelProps & ExtraProps> = ({
               method: "POST",
               headers: {
                 "Content-Type": "application/json",
+                "x-mcp-access-token":
+                  mcpTool.accessToken && mcpTool.accessToken !== ""
+                    ? mcpTool.accessToken
+                    : "",
+                "x-project-id": project_id,
               },
               body: JSON.stringify(body),
             }
@@ -1679,6 +1707,50 @@ const ChatPanel: React.FC<ChatPanelProps & ExtraProps> = ({
     if (customerEmailCaptureMode === "REQUIRED") return true;
   };
 
+  // helper to dedupe tool names
+  const getUniqueToolNames = (reqs: typeof pendingToolRequests) =>
+    Array.from(new Set(reqs.map((r) => r.toolName)));
+
+  // called by each button
+  const handleToolApproval = (
+    toolName: string,
+    scope: "once" | "session" | "always"
+  ) => {
+    if (scope === "session" || scope === "always") {
+      setSessionApprovedTools((p) => Array.from(new Set([...p, toolName])));
+    }
+    if (scope === "always") {
+      setAlwaysApprovedTools((p) => Array.from(new Set([...p, toolName])));
+    }
+
+    // process and remove just this tool’s calls
+    const requestsToRun = pendingToolRequests.filter(
+      (r) => r.toolName === toolName
+    );
+    processGivenToolRequests(requestsToRun);
+    setPendingToolRequests((p) => p.filter((r) => r.toolName !== toolName));
+  };
+
+  // auto‐process pending tools that were previously approved (session or always)
+  useEffect(() => {
+    if (pendingToolRequests.length === 0) return;
+    const toAuto = pendingToolRequests.filter(
+      (r) =>
+        sessionApprovedTools.includes(r.toolName) ||
+        alwaysApprovedTools.includes(r.toolName)
+    );
+    if (toAuto.length > 0) {
+      processGivenToolRequests(toAuto);
+      setPendingToolRequests((prev) =>
+        prev.filter(
+          (r) =>
+            !sessionApprovedTools.includes(r.toolName) &&
+            !alwaysApprovedTools.includes(r.toolName)
+        )
+      );
+    }
+  }, [pendingToolRequests, sessionApprovedTools, alwaysApprovedTools]);
+
   return (
     <>
       <div
@@ -1734,23 +1806,57 @@ const ChatPanel: React.FC<ChatPanelProps & ExtraProps> = ({
 
                   {isLastEntry && pendingToolRequests.length > 0 && (
                     <div className="approve-tools-panel">
-                      <div className="approve-tools-header">
-                        Tools need approval before use
-                      </div>
+                      {getUniqueToolNames(pendingToolRequests).map(
+                        (toolName) => {
+                          const tool = toolList.find(
+                            (t) => t.name === toolName
+                          );
+                          return (
+                            <div key={toolName} className="approve-tool-item">
+                              <div className="approve-tools-header">
+                                Tool “{toolName}” requires approval <br />
+                              </div>
 
-                      <button
-                        className="approve-tools-button"
-                        onClick={() => {
-                          processAllToolRequests();
-                        }}
-                        disabled={isLoading}
-                      >
-                        {isLoading
-                          ? "Processing Tools..."
-                          : pendingToolRequests.length > 1
-                          ? `Approve ${pendingToolRequests.length} Tools`
-                          : "Approve Tool Use"}
-                      </button>
+                              <div className="approve-tools-buttons">
+                                <button
+                                  className="approve-tools-button"
+                                  onClick={() =>
+                                    handleToolApproval(toolName, "once")
+                                  }
+                                  disabled={isLoading}
+                                >
+                                  Approve Once
+                                </button>
+                                <button
+                                  className="approve-tools-button"
+                                  onClick={() =>
+                                    handleToolApproval(toolName, "session")
+                                  }
+                                  disabled={isLoading}
+                                >
+                                  Approve This Chat
+                                </button>
+                                <button
+                                  className="approve-tools-button"
+                                  onClick={() =>
+                                    handleToolApproval(toolName, "always")
+                                  }
+                                  disabled={isLoading}
+                                >
+                                  Approve Always
+                                </button>
+                                <br />
+                              </div>
+
+                              {tool?.description && (
+                                <div className="approve-tools-description">
+                                  {tool.description}
+                                </div>
+                              )}
+                            </div>
+                          );
+                        }
+                      )}
                     </div>
                   )}
 

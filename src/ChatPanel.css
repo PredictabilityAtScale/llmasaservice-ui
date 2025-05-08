@@ -521,12 +521,19 @@
   margin-left: calc(-1 * var(--spacing-medium));
   margin-right: calc(-1 * var(--spacing-medium));
   color: black;
-
 }
 
 .approve-tools-header {
   font-size: 0.75em;
   text-align: center;
+}
+
+.approve-tools-buttons {
+  display: flex;
+  justify-content: center;
+  flex-wrap: wrap;
+  gap: var(--spacing-small);
+  margin: var(--spacing-small) 0;
 }
 
 .approve-tools-button {
@@ -539,6 +546,13 @@
   cursor: pointer;
   margin: var(--spacing-small);
   box-shadow: var(--button-drop-shadow);
+}
+
+.approve-tools-description {
+  text-align: center;
+  font-size: 0.75em;
+  color: var(--button-action-text-color);
+  padding: 0 var(--spacing-small) var(--spacing-small);
 }
 
 /* --------------------------------------------------------
