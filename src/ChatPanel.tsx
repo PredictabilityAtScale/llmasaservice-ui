@@ -680,8 +680,6 @@ const ChatPanel: React.FC<ChatPanelProps & ExtraProps> = ({
       openAI_toolAction,
       google_toolAction,
     ]);
-
-    console.log("use effect allActions", allActions);
   }, [actions]);
 
   const pendingToolRequestsRef = useRef(pendingToolRequests);
@@ -831,7 +829,7 @@ const ChatPanel: React.FC<ChatPanelProps & ExtraProps> = ({
             return null; // Exit if JSON parsing failed
           }
 
-          console.log("tool result data", resultData);
+          //console.log("tool result data", resultData);
           if (
             resultData &&
             resultData.content &&
@@ -889,7 +887,7 @@ const ChatPanel: React.FC<ChatPanelProps & ExtraProps> = ({
         }
       });
 
-      console.log("Sending final messages with all tool results:", newMessages);
+      //console.log("Sending final messages with all tool results:", newMessages);
 
       send(
         "",
