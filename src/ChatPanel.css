@@ -439,6 +439,37 @@
 /* --------------------------------------------------------
    Powered By / Footer
 -------------------------------------------------------- */
+.footer-container {
+  display: flex;
+  align-items: center;
+  min-height: 24px;
+}
+
+.footer-container.no-tools {
+  justify-content: center;
+}
+
+.footer-container.with-tools {
+  justify-content: space-between;
+}
+
+.footer-left {
+  flex: 1;
+  display: flex;
+  justify-content: center;
+}
+
+.footer-right {
+  flex: 1;
+  display: flex;
+  justify-content: center;
+}
+
+.footer-center {
+  flex: none;
+  width: 100%;
+}
+
 .powered-by {
   display: flex;
   justify-content: center;
@@ -452,6 +483,56 @@
 .powered-by a {
   color: var(--powered-by-text-color);
   text-decoration: underline;
+}
+
+/* Tool status indicator styles */
+.tool-status {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 10px;
+  color: #666;
+  opacity: 0.7;
+  cursor: help;
+}
+
+.tool-status-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  margin-right: 4px;
+  display: inline-block;
+  cursor: help;
+}
+
+.tool-status-dot.loading {
+  background-color: #ffa500;
+  animation: pulse 1.5s ease-in-out infinite;
+}
+
+.tool-status-dot.ready {
+  background-color: #28a745;
+}
+
+.tool-status-dot.ready:hover {
+  background-color: #34ce57;
+  transform: scale(1.2);
+  transition: all 0.2s ease;
+}
+
+.tool-status-dot.error {
+  background-color: #dc3545;
+}
+
+.tool-status-text {
+  font-size: 9px;
+  font-weight: 300;
+  cursor: help;
+}
+
+.tool-status-text:hover {
+  opacity: 1;
+  transition: opacity 0.2s ease;
 }
 
 /* --------------------------------------------------------
@@ -716,4 +797,60 @@
   background-color: #007bff;
   color: white;
   cursor: pointer;
+}
+
+/* Tool status indicator styles */
+.tool-status {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-top: 4px;
+  font-size: 10px;
+  color: #666;
+  opacity: 0.7;
+  cursor: help;
+}
+
+.tool-status-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  margin-right: 4px;
+  display: inline-block;
+  cursor: help;
+}
+
+.tool-status-dot.loading {
+  background-color: #ffa500;
+  animation: pulse 1.5s ease-in-out infinite;
+}
+
+.tool-status-dot.ready {
+  background-color: #28a745;
+}
+
+.tool-status-dot.ready:hover {
+  background-color: #34ce57;
+  transform: scale(1.2);
+  transition: all 0.2s ease;
+}
+
+.tool-status-dot.error {
+  background-color: #dc3545;
+}
+
+.tool-status-text {
+  font-size: 9px;
+  font-weight: 300;
+  cursor: help;
+}
+
+.tool-status-text:hover {
+  opacity: 1;
+  transition: opacity 0.2s ease;
+}
+
+/* Dark theme support */
+.dark-theme .tool-status {
+  color: #999;
 }

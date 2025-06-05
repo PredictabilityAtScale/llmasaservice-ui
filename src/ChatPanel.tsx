@@ -7,10 +7,11 @@ import React, {
   useState,
 } from "react";
 import ReactMarkdown from "react-markdown";
-import rehypeRaw from "rehype-raw";
+
 import ReactDOMServer from "react-dom/server";
 import "./ChatPanel.css";
 import remarkGfm from "remark-gfm";
+import rehypeRaw from "rehype-raw";
 import { Prism as SyntaxHighlighter } from "react-syntax-highlighter";
 import PrismStyle from "react-syntax-highlighter";
 import materialDark from "react-syntax-highlighter/dist/esm/styles/prism/material-dark.js";
@@ -312,6 +313,8 @@ const ChatPanel: React.FC<ChatPanelProps & ExtraProps> = ({
   }
 
   const [toolList, setToolList] = useState<any[]>([]);
+  const [toolsLoading, setToolsLoading] = useState(false);
+  const [toolsFetchError, setToolsFetchError] = useState(false);
 
   // mcp servers are passed in in the mcpServers prop. Fetch tools for each one.
   useEffect(() => {
@@ -320,8 +323,13 @@ const ChatPanel: React.FC<ChatPanelProps & ExtraProps> = ({
     const fetchAndSetTools = async () => {
       if (!mcpServers || mcpServers.length === 0) {
         setToolList([]);
+        setToolsLoading(false);
+        setToolsFetchError(false);
         return;
       }
+
+      setToolsLoading(true);
+      setToolsFetchError(false);
 
       try {
         // Create an array of promises, one for each fetch call
@@ -338,13 +346,15 @@ const ChatPanel: React.FC<ChatPanelProps & ExtraProps> = ({
               );
               const errorBody = await response.text();
               console.error(`Error body: ${errorBody}`);
-              return [];
+              throw new Error(`HTTP ${response.status}: ${response.statusText}`);
             }
             const toolsFromServer = await response.json();
             if (Array.isArray(toolsFromServer)) {
               return toolsFromServer.map((tool) => ({
                 ...tool,
                 url: m.url,
+                accessToken: m.accessToken || "",
+                headers: {}
               }));
             } else {
               return [];
@@ -354,7 +364,7 @@ const ChatPanel: React.FC<ChatPanelProps & ExtraProps> = ({
               `Network or parsing error fetching tools from ${m.url}:`,
               fetchError
             );
-            return [];
+            throw fetchError; // Re-throw to be caught by outer try-catch
           }
         });
 
@@ -365,12 +375,16 @@ const ChatPanel: React.FC<ChatPanelProps & ExtraProps> = ({
 
         console.log("Merged tools from all servers:", allTools);
         setToolList(allTools);
+        setToolsFetchError(false);
       } catch (error) {
         console.error(
           "An error occurred while processing tool fetches:",
           error
         );
         setToolList([]); // Clear tools on overall error
+        setToolsFetchError(true);
+      } finally {
+        setToolsLoading(false);
       }
     };
 
@@ -1587,12 +1601,12 @@ const ChatPanel: React.FC<ChatPanelProps & ExtraProps> = ({
     setEmailSent(true);
   };
 
-  const handleSuggestionClick = (suggestion: string) => {
+  const handleSuggestionClick = async (suggestion: string) => {
     continueChat(suggestion);
-    interactionClicked(lastCallId, "suggestion");
+    await interactionClicked(lastCallId, "suggestion");
   };
 
-  const sendConversationsViaEmail = (
+  const sendConversationsViaEmail = async (
     to: string,
     subject: string = `Conversation History from ${title}`,
     from: string = ""
@@ -1614,7 +1628,7 @@ const ChatPanel: React.FC<ChatPanelProps & ExtraProps> = ({
       }),
     });
 
-    interactionClicked(lastCallId, "email", from);
+    await interactionClicked(lastCallId, "email", from);
   };
 
   const sendCallToActionEmail = async (from: string) => {
@@ -1635,7 +1649,7 @@ const ChatPanel: React.FC<ChatPanelProps & ExtraProps> = ({
       }),
     });
 
-    interactionClicked(lastCallId, "cta", from);
+    await interactionClicked(lastCallId, "cta", from);
 
     setCallToActionSent(true);
   };
@@ -2197,150 +2211,181 @@ const ChatPanel: React.FC<ChatPanelProps & ExtraProps> = ({
           </button>
         </div>
         {showPoweredBy && (
-          <div>
-            <div className="powered-by">
-              <svg
-                width="16"
-                height="16"
-                viewBox="0 0 72 72"
-                fill="none"
-                xmlns="http://www.w3.org/2000/svg"
-              >
-                <ellipse
-                  cx="14.0868"
-                  cy="59.2146"
-                  rx="7.8261"
-                  ry="7.7854"
-                  fill="#2487D8"
-                />
-                <ellipse
-                  cx="24.9013"
-                  cy="43.0776"
-                  rx="6.11858"
-                  ry="6.08676"
-                  fill="#2487D8"
-                />
-                <ellipse
-                  cx="45.391"
-                  cy="43.0776"
-                  rx="6.11858"
-                  ry="6.08676"
-                  fill="#2487D8"
-                />
-                <ellipse
-                  cx="65.8813"
-                  cy="43.0776"
-                  rx="6.11858"
-                  ry="6.08676"
-                  fill="#2487D8"
-                />
-                <ellipse
-                  cx="13.9444"
-                  cy="30.4795"
-                  rx="4.83795"
-                  ry="4.81279"
-                  fill="#2487D8"
-                />
-                <ellipse
-                  cx="34.7193"
-                  cy="30.4795"
-                  rx="4.83795"
-                  ry="4.81279"
-                  fill="#2487D8"
-                />
-                <ellipse
-                  cx="55.4942"
-                  cy="30.4795"
-                  rx="4.83795"
-                  ry="4.81279"
-                  fill="#2487D8"
-                />
-                <ellipse
-                  cx="3.27273"
-                  cy="20.4293"
-                  rx="3.27273"
-                  ry="3.25571"
-                  fill="#2487D8"
-                />
-                <ellipse
-                  cx="24.9011"
-                  cy="20.4293"
-                  rx="3.27273"
-                  ry="3.25571"
-                  fill="#2487D8"
-                />
-                <ellipse
-                  cx="45.3914"
-                  cy="20.4293"
-                  rx="3.27273"
-                  ry="3.25571"
-                  fill="#2487D8"
-                />
-                <ellipse
-                  cx="12.2373"
-                  cy="13.4931"
-                  rx="1.70751"
-                  ry="1.69863"
-                  fill="#2487D8"
-                />
-                <ellipse
-                  cx="33.0122"
-                  cy="13.4931"
-                  rx="1.70751"
-                  ry="1.69863"
-                  fill="#2487D8"
-                />
-                <ellipse
-                  cx="53.5019"
-                  cy="13.4931"
-                  rx="1.70751"
-                  ry="1.69863"
-                  fill="#2487D8"
-                />
-                <ellipse
-                  cx="19.3517"
-                  cy="6.13242"
-                  rx="1.13834"
-                  ry="1.13242"
-                  fill="#2487D8"
-                />
-                <ellipse
-                  cx="40.1266"
-                  cy="6.13242"
-                  rx="1.13834"
-                  ry="1.13242"
-                  fill="#2487D8"
-                />
-                <ellipse
-                  cx="60.901"
-                  cy="6.13242"
-                  rx="1.13834"
-                  ry="1.13242"
-                  fill="#2487D8"
-                />
-                <ellipse
-                  cx="34.8617"
-                  cy="59.2146"
-                  rx="7.8261"
-                  ry="7.7854"
-                  fill="#2487D8"
-                />
-                <ellipse
-                  cx="55.6366"
-                  cy="59.2146"
-                  rx="7.8261"
-                  ry="7.7854"
-                  fill="#ED7D31"
-                />
-              </svg>{" "}
-              &nbsp;&nbsp;powered by&nbsp;
-              <a
-                href="https://llmasaservice.io"
-                target="_blank"
-                rel="noopener noreferrer"
-              >
-                llmasaservice.io
-              </a>
+          <div className={`footer-container ${(mcpServers && mcpServers.length > 0) ? 'with-tools' : 'no-tools'}`}>
+            {/* Tool status indicator - only show when tools are configured */}
+            {(mcpServers && mcpServers.length > 0) && (
+              <div className="footer-left">
+                <div className="tool-status">
+                  <span 
+                    className={`tool-status-dot ${toolsLoading ? 'loading' : (toolsFetchError ? 'error' : 'ready')}`}
+                    title={
+                      !toolsLoading && !toolsFetchError && toolList.length > 0 
+                        ? toolList.map(tool => `${tool.name}: ${tool.description || 'No description'}`).join('\n')
+                        : ''
+                    }
+                  ></span>
+                  <span 
+                    className="tool-status-text"
+                    title={
+                      !toolsLoading && !toolsFetchError && toolList.length > 0 
+                        ? toolList.map(tool => `${tool.name}: ${tool.description || 'No description'}`).join('\n')
+                        : ''
+                    }
+                  >
+                    {toolsLoading ? 'tools loading...' : 
+                     toolsFetchError ? 'tool fetch failed' :
+                     toolList.length > 0 ? `${toolList.length} tools ready` : 
+                     'no tools found'}
+                  </span>
+                </div>
+              </div>
+            )}
+            
+            <div className={`footer-right ${(mcpServers && mcpServers.length > 0) ? '' : 'footer-center'}`}>
+              <div className="powered-by">
+                <svg
+                  width="16"
+                  height="16"
+                  viewBox="0 0 72 72"
+                  fill="none"
+                  xmlns="http://www.w3.org/2000/svg"
+                >
+                  <ellipse
+                    cx="14.0868"
+                    cy="59.2146"
+                    rx="7.8261"
+                    ry="7.7854"
+                    fill="#2487D8"
+                  />
+                  <ellipse
+                    cx="24.9013"
+                    cy="43.0776"
+                    rx="6.11858"
+                    ry="6.08676"
+                    fill="#2487D8"
+                  />
+                  <ellipse
+                    cx="45.391"
+                    cy="43.0776"
+                    rx="6.11858"
+                    ry="6.08676"
+                    fill="#2487D8"
+                  />
+                  <ellipse
+                    cx="65.8813"
+                    cy="43.0776"
+                    rx="6.11858"
+                    ry="6.08676"
+                    fill="#2487D8"
+                  />
+                  <ellipse
+                    cx="13.9444"
+                    cy="30.4795"
+                    rx="4.83795"
+                    ry="4.81279"
+                    fill="#2487D8"
+                  />
+                  <ellipse
+                    cx="34.7193"
+                    cy="30.4795"
+                    rx="4.83795"
+                    ry="4.81279"
+                    fill="#2487D8"
+                  />
+                  <ellipse
+                    cx="55.4942"
+                    cy="30.4795"
+                    rx="4.83795"
+                    ry="4.81279"
+                    fill="#2487D8"
+                  />
+                  <ellipse
+                    cx="3.27273"
+                    cy="20.4293"
+                    rx="3.27273"
+                    ry="3.25571"
+                    fill="#2487D8"
+                  />
+                  <ellipse
+                    cx="24.9011"
+                    cy="20.4293"
+                    rx="3.27273"
+                    ry="3.25571"
+                    fill="#2487D8"
+                  />
+                  <ellipse
+                    cx="45.3914"
+                    cy="20.4293"
+                    rx="3.27273"
+                    ry="3.25571"
+                    fill="#2487D8"
+                  />
+                  <ellipse
+                    cx="12.2373"
+                    cy="13.4931"
+                    rx="1.70751"
+                    ry="1.69863"
+                    fill="#2487D8"
+                  />
+                  <ellipse
+                    cx="33.0122"
+                    cy="13.4931"
+                    rx="1.70751"
+                    ry="1.69863"
+                    fill="#2487D8"
+                  />
+                  <ellipse
+                    cx="53.5019"
+                    cy="13.4931"
+                    rx="1.70751"
+                    ry="1.69863"
+                    fill="#2487D8"
+                  />
+                  <ellipse
+                    cx="19.3517"
+                    cy="6.13242"
+                    rx="1.13834"
+                    ry="1.13242"
+                    fill="#2487D8"
+                  />
+                  <ellipse
+                    cx="40.1266"
+                    cy="6.13242"
+                    rx="1.13834"
+                    ry="1.13242"
+                    fill="#2487D8"
+                  />
+                  <ellipse
+                    cx="60.901"
+                    cy="6.13242"
+                    rx="1.13834"
+                    ry="1.13242"
+                    fill="#2487D8"
+                  />
+                  <ellipse
+                    cx="34.8617"
+                    cy="59.2146"
+                    rx="7.8261"
+                    ry="7.7854"
+                    fill="#2487D8"
+                  />
+                  <ellipse
+                    cx="55.6366"
+                    cy="59.2146"
+                    rx="7.8261"
+                    ry="7.7854"
+                    fill="#ED7D31"
+                  />
+                </svg>{" "}
+                &nbsp;&nbsp;powered by&nbsp;
+                <a
+                  href="https://llmasaservice.io"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                >
+                  llmasaservice.io
+                </a>
+              </div>
             </div>
           </div>
         )}

@@ -2,17 +2,25 @@ import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { SSEClientTransport } from "@modelcontextprotocol/sdk/client/sse.js";
 import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/streamableHttp.js";
 
-/*
-reference: https://github.com/cyanheads/model-context-protocol-resources/blob/main/guides/mcp-client-development-guide.md
-*/
-
 export class MCPClient {
   private client: Client;
   private transport: SSEClientTransport | StreamableHTTPClientTransport;
-  private headers: [];
+  private headers: Record<string, string>;
   public tools: any[] = [];
 
-  constructor(name: string, transport: string, url: string, headers: [] = []) {
+  constructor(
+    name: string, 
+    transport: string, 
+    url: string, 
+    headers: Record<string, string> = {},
+    accessToken?: string
+  ) {
+    // Merge any provided headers with access token
+    this.headers = {
+      ...headers,
+      ...(accessToken ? { 'Authorization': `Bearer ${accessToken}` } : {})
+    };
+
     switch (transport.toLowerCase()) {
       case "sse":
         this.transport = new SSEClientTransport(new URL(url));
@@ -24,6 +32,11 @@ export class MCPClient {
         this.transport = new StreamableHTTPClientTransport(new URL(url));
     }
 
+    // Set headers on the transport if supported
+    if ('setHeaders' in this.transport && typeof this.transport.setHeaders === 'function') {
+      this.transport.setHeaders(this.headers);
+    }
+
     this.client = new Client(
       {
         name: name,
@@ -31,8 +44,6 @@ export class MCPClient {
       },
       { capabilities: { tools: {}, resources: {}, prompts: {} } }
     );
-
-    this.headers = headers;
   }
 
   async connect() {

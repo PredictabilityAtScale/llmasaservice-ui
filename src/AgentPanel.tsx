@@ -142,8 +142,13 @@ const AgentPanel: React.FC<AgentPanelProps & ExtraProps> = ({
 
           const mcpData = await response.json();
           if (mcpData && mcpData.length > 0) {
-            console.log("MCP servers", mcpData);
-            setMCPData(mcpData);
+            // only active and NOT SERVER side mcp servers
+            setMCPData(
+              mcpData.filter(
+                (mcp: any) =>
+                  mcp.status === "active" && mcp.executionMode !== "SERVER"
+              )
+            );
           }
         }
       } catch (error) {
