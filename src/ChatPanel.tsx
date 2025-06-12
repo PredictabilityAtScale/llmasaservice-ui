@@ -1278,6 +1278,23 @@ const ChatPanel: React.FC<ChatPanelProps & ExtraProps> = ({
   const continueChat = (suggestion?: string) => {
     console.log("continueChat", suggestion);
 
+    // Auto-set email if valid before proceeding
+    if (emailInput && isEmailAddress(emailInput) && !emailInputSet) {
+      const newId =
+        currentCustomer?.customer_id &&
+        currentCustomer.customer_id !== "" &&
+        currentCustomer.customer_id !== currentCustomer?.customer_user_email
+          ? currentCustomer.customer_id
+          : emailInput;
+
+      setEmailInputSet(true);
+      setEmailValid(true);
+      setCurrentCustomer({
+        customer_id: newId,
+        customer_user_email: emailInput,
+      });
+    }
+
     // wait till new conversation created....
     ensureConversation().then((convId) => {
       console.log("current customer", currentCustomer);
@@ -1717,6 +1734,7 @@ const ChatPanel: React.FC<ChatPanelProps & ExtraProps> = ({
     const valid = isEmailAddress(emailInput);
     if (valid) return false;
     if (customerEmailCaptureMode === "REQUIRED") return true;
+    return false;
   };
 
   // helper to dedupe tool names
@@ -2024,73 +2042,63 @@ const ChatPanel: React.FC<ChatPanelProps & ExtraProps> = ({
                 }
                 placeholder={customerEmailCapturePlaceholder}
                 value={emailInput}
-                onChange={(e) => setEmailInput(e.target.value)}
-                disabled={emailInputSet}
-              />
-              <button
-                className="email-input-button"
-                onClick={() => {
-                  // turn back to edit mode
-                  if (emailInputSet) {
-                    setEmailInputSet(false);
-                    return;
+                onChange={(e) => {
+                  const newEmail = e.target.value;
+                  setEmailInput(newEmail);
+                  
+                  // Reset validation state while typing
+                  if (!emailInputSet) {
+                    if (customerEmailCaptureMode === "REQUIRED" && newEmail !== "") {
+                      setEmailValid(isEmailAddress(newEmail));
+                    } else {
+                      setEmailValid(true);
+                    }
                   }
+                }}
+                onBlur={() => {
+                  // Auto-validate and set email when field loses focus
+                  if (emailInput && isEmailAddress(emailInput) && !emailInputSet) {
+                    const newId =
+                      currentCustomer?.customer_id &&
+                      currentCustomer.customer_id !== "" &&
+                      currentCustomer.customer_id !== currentCustomer?.customer_user_email
+                        ? currentCustomer.customer_id
+                        : emailInput;
 
-                  // Determine customer_id:
-                  // 1. If current customer_id exists and is not the old email, keep it
-                  // 2. If current customer_id matches the old email, use the new email
-                  // 3. Otherwise use the new email
-                  const newId =
-                    currentCustomer?.customer_id &&
-                    currentCustomer.customer_id !== "" &&
-                    currentCustomer.customer_id !==
-                      currentCustomer?.customer_user_email
-                      ? currentCustomer.customer_id // Keep existing ID if it's not the old email
-                      : emailInput; // Use new email as ID in all other cases
-
-                  // validate and set
-                  if (isEmailAddress(emailInput)) {
-                    setEmailInputSet((current) => !current);
+                    setEmailInputSet(true);
                     setEmailValid(true);
-
-                    //setting customer id / email
                     setCurrentCustomer({
                       customer_id: newId,
                       customer_user_email: emailInput,
                     });
 
-                    // if they were in the middle of a submit CTA, call that now
+                    // Handle pending actions
                     if (CTAClickedButNoEmail) {
                       sendCallToActionEmail(emailInput);
                       setCTAClickedButNoEmail(false);
                     }
-
                     if (emailClickedButNoEmail) {
                       handleSendEmail(emailInput, emailInput);
                       setEmailClickedButNoEmail(false);
                     }
-                  } else {
-                    if (customerEmailCaptureMode === "REQUIRED") {
-                      setEmailValid(false);
-                    } else {
-                      if (emailInput === "") {
-                        // special case, blanking email if optional or hidden
-                        setEmailInputSet(false);
-                        setEmailValid(true);
-                        setCurrentCustomer({
-                          customer_id: newId,
-                          customer_user_email: emailInput,
-                        });
-                      } else {
-                        // they tried to enter an optional email, but it was invalid
-                        setEmailValid(false);
-                      }
-                    }
+                  } else if (customerEmailCaptureMode === "REQUIRED" && emailInput !== "") {
+                    setEmailValid(isEmailAddress(emailInput));
                   }
                 }}
-              >
-                {emailInputSet ? "✎" : "set"}
-              </button>
+                disabled={false}
+              />
+              {emailInputSet && (
+                <button
+                  className="email-input-button"
+                  onClick={() => {
+                    setEmailInputSet(false);
+                    setEmailValid(true);
+                  }}
+                  title="Edit email"
+                >
+                  ✎
+                </button>
+              )}
             </div>
           </>
         )}
