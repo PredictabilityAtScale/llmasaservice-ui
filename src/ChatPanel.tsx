@@ -96,7 +96,7 @@ const ChatPanel: React.FC<ChatPanelProps & ExtraProps> = ({
   title = "",
   placeholder = "Type a message",
   hideInitialPrompt = true,
-  customer = {} as LLMAsAServiceCustomer,
+  customer = {},
   messages = [],
   data = [],
   thumbsUpClick,
@@ -163,7 +163,7 @@ const ChatPanel: React.FC<ChatPanelProps & ExtraProps> = ({
     conversation
   );
   const [emailInput, setEmailInput] = useState(
-    customer?.customer_user_email ?? ""
+    (customer as LLMAsAServiceCustomer)?.customer_user_email ?? ""
   );
   const [emailInputSet, setEmailInputSet] = useState(
     isEmailAddress(emailInput)
@@ -177,7 +177,7 @@ const ChatPanel: React.FC<ChatPanelProps & ExtraProps> = ({
   const [emailSent, setEmailSent] = useState(false);
   const [emailClickedButNoEmail, setEmailClickedButNoEmail] = useState(false);
   const [currentCustomer, setCurrentCustomer] =
-    useState<LLMAsAServiceCustomer>(customer);
+    useState<LLMAsAServiceCustomer>(customer as LLMAsAServiceCustomer);
   const [allActions, setAllActions] = useState<
     {
       pattern: string;
@@ -346,7 +346,9 @@ const ChatPanel: React.FC<ChatPanelProps & ExtraProps> = ({
               );
               const errorBody = await response.text();
               console.error(`Error body: ${errorBody}`);
-              throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+              throw new Error(
+                `HTTP ${response.status}: ${response.statusText}`
+              );
             }
             const toolsFromServer = await response.json();
             if (Array.isArray(toolsFromServer)) {
@@ -354,7 +356,7 @@ const ChatPanel: React.FC<ChatPanelProps & ExtraProps> = ({
                 ...tool,
                 url: m.url,
                 accessToken: m.accessToken || "",
-                headers: {}
+                headers: {},
               }));
             } else {
               return [];
@@ -1202,10 +1204,6 @@ const ChatPanel: React.FC<ChatPanelProps & ExtraProps> = ({
     let updatedValues = { ...currentCustomer };
     let needsUpdate = false;
 
-    if (!isEmpty(currentCustomer?.customer_id)) {
-      setCookie("llmasaservice-panel-customer-id", currentCustomer.customer_id);
-    }
-
     if (
       !isEmpty(currentCustomer?.customer_user_email) &&
       isEmailAddress(currentCustomer.customer_user_email ?? "")
@@ -1222,21 +1220,22 @@ const ChatPanel: React.FC<ChatPanelProps & ExtraProps> = ({
       }
     }
 
-    // Then, check for any missing values and try to get them from cookies
-    if (isEmpty(currentCustomer?.customer_id)) {
-      const cookieId = getCookie("llmasaservice-panel-customer-id");
-      if (!isEmpty(cookieId)) {
-        updatedValues.customer_id = cookieId ?? "";
-        needsUpdate = true;
-      }
-    }
-
     if (isEmpty(currentCustomer?.customer_user_email)) {
       const cookieEmail = getCookie("llmasaservice-panel-customer-user-email");
       if (!isEmpty(cookieEmail) && isEmailAddress(cookieEmail ?? "")) {
         updatedValues.customer_user_email = cookieEmail;
         needsUpdate = true;
       }
+    }
+
+    // if the customer_id is not set, but the email is set, use the email as the customer_id
+    if (
+      isEmpty(currentCustomer?.customer_id) &&
+      !isEmpty( updatedValues.customer_user_email) &&
+      isEmailAddress( updatedValues.customer_user_email ?? "")
+    ) {
+      updatedValues.customer_id = updatedValues.customer_user_email ?? "";
+      needsUpdate = true;
     }
 
     // Only update state if the derived values are actually different
@@ -2045,10 +2044,13 @@ const ChatPanel: React.FC<ChatPanelProps & ExtraProps> = ({
                 onChange={(e) => {
                   const newEmail = e.target.value;
                   setEmailInput(newEmail);
-                  
+
                   // Reset validation state while typing
                   if (!emailInputSet) {
-                    if (customerEmailCaptureMode === "REQUIRED" && newEmail !== "") {
+                    if (
+                      customerEmailCaptureMode === "REQUIRED" &&
+                      newEmail !== ""
+                    ) {
                       setEmailValid(isEmailAddress(newEmail));
                     } else {
                       setEmailValid(true);
@@ -2057,11 +2059,16 @@ const ChatPanel: React.FC<ChatPanelProps & ExtraProps> = ({
                 }}
                 onBlur={() => {
                   // Auto-validate and set email when field loses focus
-                  if (emailInput && isEmailAddress(emailInput) && !emailInputSet) {
+                  if (
+                    emailInput &&
+                    isEmailAddress(emailInput) &&
+                    !emailInputSet
+                  ) {
                     const newId =
                       currentCustomer?.customer_id &&
                       currentCustomer.customer_id !== "" &&
-                      currentCustomer.customer_id !== currentCustomer?.customer_user_email
+                      currentCustomer.customer_id !==
+                        currentCustomer?.customer_user_email
                         ? currentCustomer.customer_id
                         : emailInput;
 
@@ -2081,7 +2088,10 @@ const ChatPanel: React.FC<ChatPanelProps & ExtraProps> = ({
                       handleSendEmail(emailInput, emailInput);
                       setEmailClickedButNoEmail(false);
                     }
-                  } else if (customerEmailCaptureMode === "REQUIRED" && emailInput !== "") {
+                  } else if (
+                    customerEmailCaptureMode === "REQUIRED" &&
+                    emailInput !== ""
+                  ) {
                     setEmailValid(isEmailAddress(emailInput));
                   }
                 }}
@@ -2219,37 +2229,68 @@ const ChatPanel: React.FC<ChatPanelProps & ExtraProps> = ({
           </button>
         </div>
         {showPoweredBy && (
-          <div className={`footer-container ${(mcpServers && mcpServers.length > 0) ? 'with-tools' : 'no-tools'}`}>
+          <div
+            className={`footer-container ${
+              mcpServers && mcpServers.length > 0 ? "with-tools" : "no-tools"
+            }`}
+          >
             {/* Tool status indicator - only show when tools are configured */}
-            {(mcpServers && mcpServers.length > 0) && (
+            {mcpServers && mcpServers.length > 0 && (
               <div className="footer-left">
                 <div className="tool-status">
-                  <span 
-                    className={`tool-status-dot ${toolsLoading ? 'loading' : (toolsFetchError ? 'error' : 'ready')}`}
+                  <span
+                    className={`tool-status-dot ${
+                      toolsLoading
+                        ? "loading"
+                        : toolsFetchError
+                        ? "error"
+                        : "ready"
+                    }`}
                     title={
-                      !toolsLoading && !toolsFetchError && toolList.length > 0 
-                        ? toolList.map(tool => `${tool.name}: ${tool.description || 'No description'}`).join('\n')
-                        : ''
+                      !toolsLoading && !toolsFetchError && toolList.length > 0
+                        ? toolList
+                            .map(
+                              (tool) =>
+                                `${tool.name}: ${
+                                  tool.description || "No description"
+                                }`
+                            )
+                            .join("\n")
+                        : ""
                     }
                   ></span>
-                  <span 
+                  <span
                     className="tool-status-text"
                     title={
-                      !toolsLoading && !toolsFetchError && toolList.length > 0 
-                        ? toolList.map(tool => `${tool.name}: ${tool.description || 'No description'}`).join('\n')
-                        : ''
+                      !toolsLoading && !toolsFetchError && toolList.length > 0
+                        ? toolList
+                            .map(
+                              (tool) =>
+                                `${tool.name}: ${
+                                  tool.description || "No description"
+                                }`
+                            )
+                            .join("\n")
+                        : ""
                     }
                   >
-                    {toolsLoading ? 'tools loading...' : 
-                     toolsFetchError ? 'tool fetch failed' :
-                     toolList.length > 0 ? `${toolList.length} tools ready` : 
-                     'no tools found'}
+                    {toolsLoading
+                      ? "tools loading..."
+                      : toolsFetchError
+                      ? "tool fetch failed"
+                      : toolList.length > 0
+                      ? `${toolList.length} tools ready`
+                      : "no tools found"}
                   </span>
                 </div>
               </div>
             )}
-            
-            <div className={`footer-right ${(mcpServers && mcpServers.length > 0) ? '' : 'footer-center'}`}>
+
+            <div
+              className={`footer-right ${
+                mcpServers && mcpServers.length > 0 ? "" : "footer-center"
+              }`}
+            >
               <div className="powered-by">
                 <svg
                   width="16"

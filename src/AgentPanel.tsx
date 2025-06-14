@@ -109,10 +109,46 @@ const AgentPanel: React.FC<AgentPanelProps & ExtraProps> = ({
   hideRagContextInPrompt = true,
 }) => {
   const searchParams = new URLSearchParams(location.search);
-  const customer_id = searchParams.get("customer_id") || "";
-  const customer_email = searchParams.get("customer_email") || "";
+  const customer_id = searchParams.get("customer_id") || null;
+  const customer_email = searchParams.get("customer_email") || null;
+  const customer_name = searchParams.get("customer_name") || null;
+  const customer_user_id = searchParams.get("customer_user_id") || null;
   const [agentData, setAgentData] = useState<any>(null);
   const [mcpData, setMCPData] = useState<any>(null);
+
+  // Create customer object only with values that exist
+  const createCustomerObject = (): LLMAsAServiceCustomer | undefined => {
+    const customerData: Partial<LLMAsAServiceCustomer> = {};
+
+    // Get customer_id from props or URL
+    const finalCustomerId = customer?.customer_id || customer_id;
+    if (finalCustomerId) {
+      customerData.customer_id = finalCustomerId;
+    }
+
+    // Get customer_user_email from props or URL
+    const finalCustomerEmail = customer?.customer_user_email || customer_email;
+    if (finalCustomerEmail) {
+      customerData.customer_user_email = finalCustomerEmail;
+    }
+
+    // Get customer_name from props or URL
+    const finalCustomerName = customer?.customer_name || customer_name;
+    if (finalCustomerName) {
+      customerData.customer_name = finalCustomerName;
+    }
+
+    // Get customer_user_id from props or URL
+    const finalCustomerUserId = customer?.customer_user_id || customer_user_id;
+    if (finalCustomerUserId) {
+      customerData.customer_user_id = finalCustomerUserId;
+    }
+
+    // Only return customer object if it has at least one property
+    return Object.keys(customerData).length > 0
+      ? (customerData as LLMAsAServiceCustomer)
+      : undefined;
+  };
 
   useEffect(() => {
     const fetchAgentData = async () => {
@@ -243,12 +279,7 @@ const AgentPanel: React.FC<AgentPanelProps & ExtraProps> = ({
           callToActionEmailSubject={
             agentData?.displayCallToActionEmailSubject ?? "Agent CTA Submitted"
           }
-          customer={{
-            customer_id: customer ? customer.customer_id : customer_id ?? "",
-            customer_user_email: customer
-              ? customer.customer_user_email
-              : customer_email ?? "",
-          }}
+          {...(createCustomerObject() && { customer: createCustomerObject() })}
           scrollToEnd={agentData?.displayScrollToEnd ?? false}
           showPoweredBy={showPoweredBy}
           messages={messages}
