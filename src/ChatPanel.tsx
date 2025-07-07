@@ -208,6 +208,12 @@ const ChatPanel: React.FC<ChatPanelProps & ExtraProps> = ({
   );
   const [alwaysApprovedTools, setAlwaysApprovedTools] = useState<string[]>([]);
 
+  // State for tracking thinking content and navigation
+  const [thinkingBlocks, setThinkingBlocks] = useState<
+    Array<{ type: "reasoning" | "searching"; content: string; index: number }>
+  >([]);
+  const [currentThinkingIndex, setCurrentThinkingIndex] = useState(0);
+
   // load “always” approvals
   useEffect(() => {
     const stored = localStorage.getItem("alwaysApprovedTools");
@@ -230,104 +236,169 @@ const ChatPanel: React.FC<ChatPanelProps & ExtraProps> = ({
 
   const [iframeUrl, setIframeUrl] = useState<string | null>(null);
   const responseAreaRef = useRef(null);
-  // Extract the last reasoning or searching tag from the response
-  const extractLastThinkingTag = (text: string): string => {
-    console.log("extractLastThinkingTag called with:", text?.length ? `${text.substring(0, 100)}...` : "empty");
-    
-    if (!text) return "Thinking";
-    
-    // Find all reasoning and searching tags using exec method (with global and multiline flags)
-    const reasoningRegex = /<reasoning>([\s\S]*?)<\/reasoning>/gi;
-    const searchingRegex = /<searching>([\s\S]*?)<\/searching>/gi;
-    
-    const allMatches: Array<{ content: string; index: number; type: string }> = [];
-    
-    // Find all reasoning matches
+
+  // Consolidated regex patterns
+  const THINKING_PATTERNS = {
+    reasoning: /<reasoning>([\s\S]*?)<\/reasoning>/gi,
+    searching: /<searching>([\s\S]*?)<\/searching>/gi,
+  } as const;
+
+  // Single function to extract thinking blocks in order
+  const processThinkingTags = (
+    text: string
+  ): {
+    cleanedText: string;
+    thinkingBlocks: Array<{
+      type: "reasoning" | "searching";
+      content: string;
+      index: number;
+    }>;
+    lastThinkingContent: string;
+  } => {
+    console.log(
+      "processThinkingTags called with text length:",
+      text?.length || 0,
+      "preview:",
+      text?.substring(0, 200) || "EMPTY"
+    );
+
+    if (!text)
+      return {
+        cleanedText: "",
+        thinkingBlocks: [],
+        lastThinkingContent: "Thinking",
+      };
+
+    const allMatches: Array<{
+      content: string;
+      index: number;
+      type: "reasoning" | "searching";
+    }> = [];
+    let cleanedText = text;
+
+    // Process reasoning blocks
+    const reasoningRegex = new RegExp(THINKING_PATTERNS.reasoning.source, "gi");
     let reasoningMatch;
     while ((reasoningMatch = reasoningRegex.exec(text)) !== null) {
-      console.log("Found reasoning match:", reasoningMatch[1]?.substring(0, 50) + "...");
-      allMatches.push({
-        content: reasoningMatch[1]?.trim() || "",
+      const content = reasoningMatch[1]?.trim();
+      console.log("Found reasoning match:", {
+        content: content?.substring(0, 100),
         index: reasoningMatch.index,
-        type: 'reasoning'
       });
+      if (content) {
+        allMatches.push({
+          content,
+          index: reasoningMatch.index,
+          type: "reasoning",
+        });
+      }
     }
-    
-    // Find all searching matches  
+
+    // Process searching blocks
+    const searchingRegex = new RegExp(THINKING_PATTERNS.searching.source, "gi");
     let searchingMatch;
     while ((searchingMatch = searchingRegex.exec(text)) !== null) {
-      console.log("Found searching match:", searchingMatch[1]?.substring(0, 50) + "...");
-      allMatches.push({
-        content: searchingMatch[1]?.trim() || "",
+      const content = searchingMatch[1]?.trim();
+      console.log("Found searching match:", {
+        content: content?.substring(0, 100),
         index: searchingMatch.index,
-        type: 'searching'
       });
-    }
-    
-    console.log("Total matches found:", allMatches.length);
-    
-    // Sort by position and get the last one
-    if (allMatches.length > 0) {
-      const lastMatch = allMatches.sort((a, b) => b.index - a.index)[0];
-      let content = lastMatch?.content || "Thinking";
-      
-      console.log("Last match content:", content?.substring(0, 100));
-      
-      // Clean up the content - remove markdown formatting and limit length
-      content = content.replace(/\*\*(.*?)\*\*/g, '$1'); // Remove bold
-      content = content.replace(/\*(.*?)\*/g, '$1'); // Remove italics
-      content = content.replace(/\n+/g, ' '); // Replace newlines with spaces
-      content = content.replace(/\s+/g, ' '); // Normalize whitespace
-      content = content.trim();
-      
-      // Limit length to keep UI clean
-      if (content.length > 80) {
-        content = content.substring(0, 77) + '...';
+      if (content) {
+        allMatches.push({
+          content,
+          index: searchingMatch.index,
+          type: "searching",
+        });
       }
-      
-      console.log("Final extracted content:", content);
-      return content || "Thinking";
     }
-    
-    console.log("No matches found, returning 'Thinking'");
-    return "Thinking";
+
+    // Sort by index to preserve original order
+    const thinkingBlocks = allMatches.sort((a, b) => a.index - b.index);
+
+    // Clean the text
+    cleanedText = cleanedText.replace(THINKING_PATTERNS.reasoning, "");
+    cleanedText = cleanedText.replace(THINKING_PATTERNS.searching, "");
+
+    // Get last thinking content
+    let lastThinkingContent = "Thinking";
+    if (thinkingBlocks.length > 0) {
+      const lastBlock = thinkingBlocks[thinkingBlocks.length - 1];
+      let content = lastBlock?.content || "Thinking";
+
+      // Clean up the content for display
+      content = content.replace(/\*\*(.*?)\*\*/g, "$1"); // Remove bold
+      content = content.replace(/\*(.*?)\*/g, "$1"); // Remove italics
+      content = content.replace(/\n+/g, " "); // Replace newlines with spaces
+      content = content.replace(/\s+/g, " "); // Normalize whitespace
+      content = content.trim();
+
+      // Limit length to keep UI clean
+      if (content.length > 100) {
+        content = content.substring(0, 100) + "...";
+      }
+
+      lastThinkingContent = content || "Thinking";
+    }
+
+    return {
+      cleanedText: cleanedText.trim(),
+      thinkingBlocks,
+      lastThinkingContent,
+    };
   };
 
-  // Process response content to show reasoning/searching in a styled format
-  const processResponseContent = (text: string, isStreaming: boolean = false): string => {
-    if (!text) return "";
-    
-    let processedText = text;
-    
-    // Replace reasoning tags with styled content
-    processedText = processedText.replace(
-      /<reasoning>([\s\S]*?)<\/reasoning>/gi,
-      (match, content) => {
-        const trimmedContent = content.trim();
-        if (!trimmedContent) return '';
-        
-        return `\n\n<div class="reasoning-section">
-<div class="reasoning-header">🤔 Reasoning</div>
-<div class="reasoning-content">${trimmedContent}</div>
-</div>\n\n`;
-      }
+  // Render thinking blocks with navigation
+  const renderThinkingBlocks = (): JSX.Element | null => {
+    if (thinkingBlocks.length === 0) return null;
+
+    const currentBlock = thinkingBlocks[currentThinkingIndex];
+    if (!currentBlock) return null;
+
+    const icon = currentBlock.type === "reasoning" ? "🤔" : "🔍";
+    const title = currentBlock.type === "reasoning" ? "Reasoning" : "Searching";
+
+    return (
+      <div className="thinking-block-container">
+        <div className={`thinking-section ${currentBlock.type}-section`}>
+          <div className="thinking-header">
+            {icon} {title}
+            {thinkingBlocks.length > 1 && (
+              <div className="thinking-navigation">
+                <button
+                  onClick={() =>
+                    setCurrentThinkingIndex(
+                      Math.max(0, currentThinkingIndex - 1)
+                    )
+                  }
+                  disabled={currentThinkingIndex === 0}
+                  className="thinking-nav-btn"
+                >
+                  ←
+                </button>
+                <span className="thinking-counter">
+                  {currentThinkingIndex + 1} / {thinkingBlocks.length}
+                </span>
+                <button
+                  onClick={() =>
+                    setCurrentThinkingIndex(
+                      Math.min(
+                        thinkingBlocks.length - 1,
+                        currentThinkingIndex + 1
+                      )
+                    )
+                  }
+                  disabled={currentThinkingIndex === thinkingBlocks.length - 1}
+                  className="thinking-nav-btn"
+                >
+                  →
+                </button>
+              </div>
+            )}
+          </div>
+          <div className="thinking-content">{currentBlock.content}</div>
+        </div>
+      </div>
     );
-    
-    // Replace searching tags with styled content
-    processedText = processedText.replace(
-      /<searching>([\s\S]*?)<\/searching>/gi,
-      (match, content) => {
-        const trimmedContent = content.trim();
-        if (!trimmedContent) return '';
-        
-        return `\n\n<div class="searching-section">
-<div class="searching-header">🔍 Searching</div>
-<div class="searching-content">${trimmedContent}</div>
-</div>\n\n`;
-      }
-    );
-    
-    return processedText;
   };
 
   const getBrowserInfo = () => {
@@ -516,7 +587,7 @@ const ChatPanel: React.FC<ChatPanelProps & ExtraProps> = ({
       responseLength: response?.length || 0,
       lastCallId,
       hasResponse: !!response,
-      timestamp: new Date().toISOString()
+      timestamp: new Date().toISOString(),
     });
   }, [isLoading, idle, response, lastCallId]);
 
@@ -1045,25 +1116,35 @@ const ChatPanel: React.FC<ChatPanelProps & ExtraProps> = ({
         length: response.length,
         isLoading,
         idle,
-        hasReasoningTags: response.includes('<reasoning>'),
-        hasSearchingTags: response.includes('<searching>'),
-        preview: response.substring(0, 200) + "..."
+        hasReasoningTags: response.includes("<reasoning>"),
+        hasSearchingTags: response.includes("<searching>"),
+        preview: response.substring(0, 200) + "...",
       });
-      
+
       setIsLoading(false);
 
-      let newResponse = response;
+      // Process thinking tags and get cleaned response
+      const { cleanedText, thinkingBlocks: newThinkingBlocks } =
+        processThinkingTags(response);
+
+      // Replace the blocks entirely (don't append) to avoid duplicates during streaming
+      setThinkingBlocks(newThinkingBlocks);
+      // Always show the latest (last) thinking block
+      setCurrentThinkingIndex(Math.max(0, newThinkingBlocks.length - 1));
+
+      let newResponse = cleanedText;
+
       const toolRequests: { match: string; groups: any[]; toolName: string }[] =
         [];
 
       if (allActions && allActions.length > 0) {
-        // Detect all tool requests first
+        // Detect all tool requests first (use original response for tool detection)
         allActions
           .filter((a) => a.actionType === "tool")
           .forEach((action) => {
             const regex = new RegExp(action.pattern, "gmi");
             let match;
-            const content = newResponse;
+            const content = response; // Use original response for tool detection
 
             // Use exec in a loop to find all matches
             while ((match = regex.exec(content)) !== null) {
@@ -1140,13 +1221,13 @@ const ChatPanel: React.FC<ChatPanelProps & ExtraProps> = ({
         setPendingToolRequests([]);
       }
 
-      // Store the raw response without processing reasoning/searching tags
-      // Tags will be processed only during streaming display
-      console.log("Storing raw response to history:", {
-        originalLength: newResponse.length,
-        hasReasoningTags: newResponse.includes('<reasoning>'),
-        hasSearchingTags: newResponse.includes('<searching>'),
-        preview: newResponse.substring(0, 200) + "..."
+      // Store the cleaned response (without reasoning/searching tags)
+      console.log("Storing cleaned response to history:", {
+        originalLength: response.length,
+        cleanedLength: newResponse.length,
+        hasReasoningTags: response.includes("<reasoning>"),
+        hasSearchingTags: response.includes("<searching>"),
+        preview: newResponse.substring(0, 200) + "...",
       });
 
       setHistory((prevHistory) => {
@@ -1160,7 +1241,7 @@ const ChatPanel: React.FC<ChatPanelProps & ExtraProps> = ({
           ...prevHistory,
           [lastKey ?? ""]: {
             ...existingEntry, // This preserves toolCalls and toolResponses
-            content: newResponse, // Store raw response without processing
+            content: newResponse, // Store cleaned response without thinking tags
             callId: lastCallId,
           },
         };
@@ -1186,6 +1267,10 @@ const ChatPanel: React.FC<ChatPanelProps & ExtraProps> = ({
     if (initialPrompt && initialPrompt !== "") {
       if (initialPrompt !== lastPrompt) {
         setIsLoading(true);
+
+        // Clear thinking blocks for new response
+        setThinkingBlocks([]);
+        setCurrentThinkingIndex(0);
 
         ensureConversation().then((convId) => {
           if (lastController) stop(lastController);
@@ -1407,6 +1492,10 @@ const ChatPanel: React.FC<ChatPanelProps & ExtraProps> = ({
   const continueChat = (suggestion?: string) => {
     console.log("continueChat", suggestion);
 
+    // Clear thinking blocks for new response
+    setThinkingBlocks([]);
+    setCurrentThinkingIndex(0);
+
     // Auto-set email if valid before proceeding
     if (emailInput && isEmailAddress(emailInput) && !emailInputSet) {
       const newId =
@@ -1435,7 +1524,9 @@ const ChatPanel: React.FC<ChatPanelProps & ExtraProps> = ({
           return {
             ...prevHistory,
             [lastKey ?? ""]: {
-              content: processResponseContent(response) + "\n\n(response cancelled)",
+              content:
+                processThinkingTags(response).cleanedText +
+                "\n\n(response cancelled)",
               callId: lastCallId,
             },
           };
@@ -1471,7 +1562,7 @@ const ChatPanel: React.FC<ChatPanelProps & ExtraProps> = ({
           messagesAndHistory.push({ role: "user", content: promptToSend });
           messagesAndHistory.push({
             role: "assistant",
-            content: processResponseContent(response.content),
+            content: response.content,
           });
         });
 
@@ -1946,36 +2037,90 @@ const ChatPanel: React.FC<ChatPanelProps & ExtraProps> = ({
                 )}
 
                 <div className="response">
-                  {/* Show streaming response with reasoning/searching tags */}
-                  {index === Object.keys(history).length - 1 && isLoading ? (
+                  {/* Show streaming response with thinking blocks displayed separately */}
+                  {index === Object.keys(history).length - 1 &&
+                  (isLoading || !idle) ? (
                     <div className="streaming-response">
-                      {response && response.length > 0 ? (
-                        <ReactMarkdown
-                          className={markdownClass}
-                          remarkPlugins={[remarkGfm]}
-                          rehypePlugins={[rehypeRaw]}
-                          components={{ /*a: CustomLink,*/ code: CodeBlock }}
-                        >
-                          {processResponseContent(response, true)}
-                        </ReactMarkdown>
-                      ) : (
-                        <div className="loading-text">
-                          {extractLastThinkingTag(response || "")}&nbsp;
-                          <div className="dot"></div>
-                          <div className="dot"></div>
-                          <div className="dot"></div>
-                        </div>
-                      )}
+                      {/* Display current thinking block or thinking message */}
+                      {(() => {
+                        const { cleanedText } = processThinkingTags(
+                          response || ""
+                        );
+
+                        // If we have thinking blocks, show the current one
+                        if (thinkingBlocks.length > 0) {
+                          const isOnLastBlock =
+                            currentThinkingIndex === thinkingBlocks.length - 1;
+                          const hasMainContent =
+                            cleanedText && cleanedText.trim().length > 0;
+                          const shouldShowLoading =
+                            isOnLastBlock && !hasMainContent;
+
+                          return (
+                            <div>
+                              {renderThinkingBlocks()}
+                              {/* Show animated thinking if we're showing the last block and no main content yet */}
+                              {shouldShowLoading && (
+                                <div className="loading-text">
+                                  Thinking...&nbsp;
+                                  <div className="dot"></div>
+                                  <div className="dot"></div>
+                                  <div className="dot"></div>
+                                </div>
+                              )}
+                            </div>
+                          );
+                        }
+
+                        // If no thinking blocks yet but no main content, show generic thinking
+                        if (!cleanedText || cleanedText.length === 0) {
+                          return (
+                            <div className="loading-text">
+                              Thinking...&nbsp;
+                              <div className="dot"></div>
+                              <div className="dot"></div>
+                              <div className="dot"></div>
+                            </div>
+                          );
+                        }
+
+                        return null;
+                      })()}
+
+                      {/* Display the main content (cleaned of thinking tags) */}
+                      {(() => {
+                        const { cleanedText } = processThinkingTags(
+                          response || ""
+                        );
+                        return cleanedText && cleanedText.length > 0 ? (
+                          <ReactMarkdown
+                            className={markdownClass}
+                            remarkPlugins={[remarkGfm]}
+                            rehypePlugins={[rehypeRaw]}
+                            components={{ /*a: CustomLink,*/ code: CodeBlock }}
+                          >
+                            {cleanedText}
+                          </ReactMarkdown>
+                        ) : null;
+                      })()}
                     </div>
                   ) : (
-                    <ReactMarkdown
-                      className={markdownClass}
-                      remarkPlugins={[remarkGfm]}
-                      rehypePlugins={[rehypeRaw]}
-                      components={{ /*a: CustomLink,*/ code: CodeBlock }}
-                    >
-                      {processResponseContent(historyEntry.content)}
-                    </ReactMarkdown>
+                    <div>
+                      {/* For completed responses, show stored thinking blocks if this is the last entry */}
+                      {isLastEntry &&
+                        thinkingBlocks.length > 0 &&
+                        renderThinkingBlocks()}
+
+                      {/* Show the main content (cleaned of thinking tags) */}
+                      <ReactMarkdown
+                        className={markdownClass}
+                        remarkPlugins={[remarkGfm]}
+                        rehypePlugins={[rehypeRaw]}
+                        components={{ /*a: CustomLink,*/ code: CodeBlock }}
+                      >
+                        {processThinkingTags(historyEntry.content).cleanedText}
+                      </ReactMarkdown>
+                    </div>
                   )}
 
                   {isLastEntry && pendingToolRequests.length > 0 && (
@@ -2039,7 +2184,7 @@ const ChatPanel: React.FC<ChatPanelProps & ExtraProps> = ({
                       <button
                         className="copy-button"
                         onClick={() => {
-                          copyToClipboard(processResponseContent(historyEntry.content));
+                          copyToClipboard(historyEntry.content);
                         }}
                         disabled={isDisabledDueToNoEmail()}
                       >
@@ -2084,7 +2229,8 @@ const ChatPanel: React.FC<ChatPanelProps & ExtraProps> = ({
                       <button
                         className="thumbs-button"
                         onClick={() => {
-                          if (thumbsDownClick) thumbsDownClick(historyEntry.callId);
+                          if (thumbsDownClick)
+                            thumbsDownClick(historyEntry.callId);
                           interactionClicked(historyEntry.callId, "thumbsdown");
                         }}
                         disabled={isDisabledDueToNoEmail()}
@@ -2240,7 +2386,7 @@ const ChatPanel: React.FC<ChatPanelProps & ExtraProps> = ({
                     setEmailValid(isEmailAddress(emailInput));
                   }
                 }}
-                disabled={ false}
+                disabled={false}
               />
               {emailInputSet && (
                 <button
