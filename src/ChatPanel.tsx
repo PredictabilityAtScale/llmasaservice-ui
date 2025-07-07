@@ -176,8 +176,9 @@ const ChatPanel: React.FC<ChatPanelProps & ExtraProps> = ({
   const [CTAClickedButNoEmail, setCTAClickedButNoEmail] = useState(false);
   const [emailSent, setEmailSent] = useState(false);
   const [emailClickedButNoEmail, setEmailClickedButNoEmail] = useState(false);
-  const [currentCustomer, setCurrentCustomer] =
-    useState<LLMAsAServiceCustomer>(customer as LLMAsAServiceCustomer);
+  const [currentCustomer, setCurrentCustomer] = useState<LLMAsAServiceCustomer>(
+    customer as LLMAsAServiceCustomer
+  );
   const [allActions, setAllActions] = useState<
     {
       pattern: string;
@@ -229,6 +230,105 @@ const ChatPanel: React.FC<ChatPanelProps & ExtraProps> = ({
 
   const [iframeUrl, setIframeUrl] = useState<string | null>(null);
   const responseAreaRef = useRef(null);
+  // Extract the last reasoning or searching tag from the response
+  const extractLastThinkingTag = (text: string): string => {
+    console.log("extractLastThinkingTag called with:", text?.length ? `${text.substring(0, 100)}...` : "empty");
+    
+    if (!text) return "Thinking";
+    
+    // Find all reasoning and searching tags using exec method (with global and multiline flags)
+    const reasoningRegex = /<reasoning>([\s\S]*?)<\/reasoning>/gi;
+    const searchingRegex = /<searching>([\s\S]*?)<\/searching>/gi;
+    
+    const allMatches: Array<{ content: string; index: number; type: string }> = [];
+    
+    // Find all reasoning matches
+    let reasoningMatch;
+    while ((reasoningMatch = reasoningRegex.exec(text)) !== null) {
+      console.log("Found reasoning match:", reasoningMatch[1]?.substring(0, 50) + "...");
+      allMatches.push({
+        content: reasoningMatch[1]?.trim() || "",
+        index: reasoningMatch.index,
+        type: 'reasoning'
+      });
+    }
+    
+    // Find all searching matches  
+    let searchingMatch;
+    while ((searchingMatch = searchingRegex.exec(text)) !== null) {
+      console.log("Found searching match:", searchingMatch[1]?.substring(0, 50) + "...");
+      allMatches.push({
+        content: searchingMatch[1]?.trim() || "",
+        index: searchingMatch.index,
+        type: 'searching'
+      });
+    }
+    
+    console.log("Total matches found:", allMatches.length);
+    
+    // Sort by position and get the last one
+    if (allMatches.length > 0) {
+      const lastMatch = allMatches.sort((a, b) => b.index - a.index)[0];
+      let content = lastMatch?.content || "Thinking";
+      
+      console.log("Last match content:", content?.substring(0, 100));
+      
+      // Clean up the content - remove markdown formatting and limit length
+      content = content.replace(/\*\*(.*?)\*\*/g, '$1'); // Remove bold
+      content = content.replace(/\*(.*?)\*/g, '$1'); // Remove italics
+      content = content.replace(/\n+/g, ' '); // Replace newlines with spaces
+      content = content.replace(/\s+/g, ' '); // Normalize whitespace
+      content = content.trim();
+      
+      // Limit length to keep UI clean
+      if (content.length > 80) {
+        content = content.substring(0, 77) + '...';
+      }
+      
+      console.log("Final extracted content:", content);
+      return content || "Thinking";
+    }
+    
+    console.log("No matches found, returning 'Thinking'");
+    return "Thinking";
+  };
+
+  // Process response content to show reasoning/searching in a styled format
+  const processResponseContent = (text: string, isStreaming: boolean = false): string => {
+    if (!text) return "";
+    
+    let processedText = text;
+    
+    // Replace reasoning tags with styled content
+    processedText = processedText.replace(
+      /<reasoning>([\s\S]*?)<\/reasoning>/gi,
+      (match, content) => {
+        const trimmedContent = content.trim();
+        if (!trimmedContent) return '';
+        
+        return `\n\n<div class="reasoning-section">
+<div class="reasoning-header">🤔 Reasoning</div>
+<div class="reasoning-content">${trimmedContent}</div>
+</div>\n\n`;
+      }
+    );
+    
+    // Replace searching tags with styled content
+    processedText = processedText.replace(
+      /<searching>([\s\S]*?)<\/searching>/gi,
+      (match, content) => {
+        const trimmedContent = content.trim();
+        if (!trimmedContent) return '';
+        
+        return `\n\n<div class="searching-section">
+<div class="searching-header">🔍 Searching</div>
+<div class="searching-content">${trimmedContent}</div>
+</div>\n\n`;
+      }
+    );
+    
+    return processedText;
+  };
 
   const getBrowserInfo = () => {
     try {
@@ -407,6 +507,18 @@ const ChatPanel: React.FC<ChatPanelProps & ExtraProps> = ({
       };
     }) as [],
   });
+
+  // Add logging for streaming states
+  useEffect(() => {
+    console.log("Streaming state changed:", {
+      isLoading,
+      idle,
+      responseLength: response?.length || 0,
+      lastCallId,
+      hasResponse: !!response,
+      timestamp: new Date().toISOString()
+    });
+  }, [isLoading, idle, response, lastCallId]);
 
   useEffect(() => {
     setShowEmailPanel(customerEmailCaptureMode !== "HIDE");
@@ -929,6 +1041,15 @@ const ChatPanel: React.FC<ChatPanelProps & ExtraProps> = ({
 
   useEffect(() => {
     if (response && response.length > 0) {
+      console.log("Response updated:", {
+        length: response.length,
+        isLoading,
+        idle,
+        hasReasoningTags: response.includes('<reasoning>'),
+        hasSearchingTags: response.includes('<searching>'),
+        preview: response.substring(0, 200) + "..."
+      });
+      
       setIsLoading(false);
 
       let newResponse = response;
@@ -1019,6 +1140,15 @@ const ChatPanel: React.FC<ChatPanelProps & ExtraProps> = ({
         setPendingToolRequests([]);
       }
 
+      // Store the raw response without processing reasoning/searching tags
+      // Tags will be processed only during streaming display
+      console.log("Storing raw response to history:", {
+        originalLength: newResponse.length,
+        hasReasoningTags: newResponse.includes('<reasoning>'),
+        hasSearchingTags: newResponse.includes('<searching>'),
+        preview: newResponse.substring(0, 200) + "..."
+      });
+
       setHistory((prevHistory) => {
         // Get any existing tool data from the previous state
         const existingEntry = prevHistory[lastKey ?? ""] || {
@@ -1030,7 +1160,7 @@ const ChatPanel: React.FC<ChatPanelProps & ExtraProps> = ({
           ...prevHistory,
           [lastKey ?? ""]: {
             ...existingEntry, // This preserves toolCalls and toolResponses
-            content: newResponse,
+            content: newResponse, // Store raw response without processing
             callId: lastCallId,
           },
         };
@@ -1231,8 +1361,8 @@ const ChatPanel: React.FC<ChatPanelProps & ExtraProps> = ({
     // if the customer_id is not set, but the email is set, use the email as the customer_id
     if (
       isEmpty(currentCustomer?.customer_id) &&
-      !isEmpty( updatedValues.customer_user_email) &&
-      isEmailAddress( updatedValues.customer_user_email ?? "")
+      !isEmpty(updatedValues.customer_user_email) &&
+      isEmailAddress(updatedValues.customer_user_email ?? "")
     ) {
       updatedValues.customer_id = updatedValues.customer_user_email ?? "";
       needsUpdate = true;
@@ -1305,7 +1435,7 @@ const ChatPanel: React.FC<ChatPanelProps & ExtraProps> = ({
           return {
             ...prevHistory,
             [lastKey ?? ""]: {
-              content: response + "\n\n(response cancelled)",
+              content: processResponseContent(response) + "\n\n(response cancelled)",
               callId: lastCallId,
             },
           };
@@ -1341,7 +1471,7 @@ const ChatPanel: React.FC<ChatPanelProps & ExtraProps> = ({
           messagesAndHistory.push({ role: "user", content: promptToSend });
           messagesAndHistory.push({
             role: "assistant",
-            content: response.content,
+            content: processResponseContent(response.content),
           });
         });
 
@@ -1802,11 +1932,11 @@ const ChatPanel: React.FC<ChatPanelProps & ExtraProps> = ({
             </div>
           ) : null}
 
-          {Object.entries(history).map(([prompt, response], index) => {
+          {Object.entries(history).map(([prompt, historyEntry], index) => {
             const isLastEntry = index === Object.keys(history).length - 1;
             const hasToolData = !!(
-              (response?.toolCalls?.length || 0) > 0 ||
-              (response?.toolResponses?.length || 0) > 0
+              (historyEntry?.toolCalls?.length || 0) > 0 ||
+              (historyEntry?.toolResponses?.length || 0) > 0
             );
 
             return (
@@ -1816,22 +1946,37 @@ const ChatPanel: React.FC<ChatPanelProps & ExtraProps> = ({
                 )}
 
                 <div className="response">
+                  {/* Show streaming response with reasoning/searching tags */}
                   {index === Object.keys(history).length - 1 && isLoading ? (
-                    <div className="loading-text">
-                      thinking&nbsp;
-                      <div className="dot"></div>
-                      <div className="dot"></div>
-                      <div className="dot"></div>
+                    <div className="streaming-response">
+                      {response && response.length > 0 ? (
+                        <ReactMarkdown
+                          className={markdownClass}
+                          remarkPlugins={[remarkGfm]}
+                          rehypePlugins={[rehypeRaw]}
+                          components={{ /*a: CustomLink,*/ code: CodeBlock }}
+                        >
+                          {processResponseContent(response, true)}
+                        </ReactMarkdown>
+                      ) : (
+                        <div className="loading-text">
+                          {extractLastThinkingTag(response || "")}&nbsp;
+                          <div className="dot"></div>
+                          <div className="dot"></div>
+                          <div className="dot"></div>
+                        </div>
+                      )}
                     </div>
-                  ) : null}
-                  <ReactMarkdown
-                    className={markdownClass}
-                    remarkPlugins={[remarkGfm]}
-                    rehypePlugins={[rehypeRaw]}
-                    components={{ /*a: CustomLink,*/ code: CodeBlock }}
-                  >
-                    {response.content}
-                  </ReactMarkdown>
+                  ) : (
+                    <ReactMarkdown
+                      className={markdownClass}
+                      remarkPlugins={[remarkGfm]}
+                      rehypePlugins={[rehypeRaw]}
+                      components={{ /*a: CustomLink,*/ code: CodeBlock }}
+                    >
+                      {processResponseContent(historyEntry.content)}
+                    </ReactMarkdown>
+                  )}
 
                   {isLastEntry && pendingToolRequests.length > 0 && (
                     <div className="approve-tools-panel">
@@ -1894,7 +2039,7 @@ const ChatPanel: React.FC<ChatPanelProps & ExtraProps> = ({
                       <button
                         className="copy-button"
                         onClick={() => {
-                          copyToClipboard(response.content);
+                          copyToClipboard(processResponseContent(historyEntry.content));
                         }}
                         disabled={isDisabledDueToNoEmail()}
                       >
@@ -1921,8 +2066,8 @@ const ChatPanel: React.FC<ChatPanelProps & ExtraProps> = ({
                       <button
                         className="thumbs-button"
                         onClick={() => {
-                          if (thumbsUpClick) thumbsUpClick(response.callId);
-                          interactionClicked(response.callId, "thumbsup");
+                          if (thumbsUpClick) thumbsUpClick(historyEntry.callId);
+                          interactionClicked(historyEntry.callId, "thumbsup");
                         }}
                         disabled={isDisabledDueToNoEmail()}
                       >
@@ -1939,8 +2084,8 @@ const ChatPanel: React.FC<ChatPanelProps & ExtraProps> = ({
                       <button
                         className="thumbs-button"
                         onClick={() => {
-                          if (thumbsDownClick) thumbsDownClick(response.callId);
-                          interactionClicked(response.callId, "thumbsdown");
+                          if (thumbsDownClick) thumbsDownClick(historyEntry.callId);
+                          interactionClicked(historyEntry.callId, "thumbsdown");
                         }}
                         disabled={isDisabledDueToNoEmail()}
                       >
@@ -2095,7 +2240,7 @@ const ChatPanel: React.FC<ChatPanelProps & ExtraProps> = ({
                     setEmailValid(isEmailAddress(emailInput));
                   }
                 }}
-                disabled={false}
+                disabled={ false}
               />
               {emailInputSet && (
                 <button
