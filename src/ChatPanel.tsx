@@ -237,14 +237,35 @@ const ChatPanel: React.FC<ChatPanelProps & ExtraProps> = ({
   const [iframeUrl, setIframeUrl] = useState<string | null>(null);
   const responseAreaRef = useRef(null);
 
-  // Consolidated regex patterns
-  const THINKING_PATTERNS = {
+  // Memoized regex patterns to avoid recreation on every render
+  const THINKING_PATTERNS = useMemo(() => ({
     reasoning: /<reasoning>([\s\S]*?)<\/reasoning>/gi,
     searching: /<searching>([\s\S]*?)<\/searching>/gi,
-  } as const;
+  }), []);
 
-  // Single function to extract thinking blocks in order
-  const processThinkingTags = (
+  // Memoized regex instances for better performance
+  const reasoningRegex = useMemo(() => new RegExp(THINKING_PATTERNS.reasoning.source, "gi"), [THINKING_PATTERNS.reasoning.source]);
+  const searchingRegex = useMemo(() => new RegExp(THINKING_PATTERNS.searching.source, "gi"), [THINKING_PATTERNS.searching.source]);
+
+  // Memoized content cleaning function
+  const cleanContentForDisplay = useCallback((content: string): string => {
+    let cleaned = content
+      .replace(/\*\*(.*?)\*\*/g, "$1") // Remove bold
+      .replace(/\*(.*?)\*/g, "$1") // Remove italics
+      .replace(/\n+/g, " ") // Replace newlines with spaces
+      .replace(/\s+/g, " ") // Normalize whitespace
+      .trim();
+
+    // Limit length to keep UI clean
+    if (cleaned.length > 100) {
+      cleaned = cleaned.substring(0, 100) + "...";
+    }
+
+    return cleaned || "Thinking";
+  }, []);
+
+  // Optimized function to extract thinking blocks in order
+  const processThinkingTags = useCallback((
     text: string
   ): {
     cleanedText: string;
@@ -255,36 +276,32 @@ const ChatPanel: React.FC<ChatPanelProps & ExtraProps> = ({
     }>;
     lastThinkingContent: string;
   } => {
-    console.log(
-      "processThinkingTags called with text length:",
-      text?.length || 0,
-      "preview:",
-      text?.substring(0, 200) || "EMPTY"
-    );
-
-    if (!text)
+    if (!text) {
       return {
         cleanedText: "",
         thinkingBlocks: [],
         lastThinkingContent: "Thinking",
       };
+    }
+
+    // Remove zero-width space characters from keepalive before processing
+    // This prevents them from interfering with thinking block extraction
+    const processedText = text.replace(/\u200B/g, "");
 
     const allMatches: Array<{
       content: string;
       index: number;
       type: "reasoning" | "searching";
     }> = [];
-    let cleanedText = text;
+
+    // Reset regex state for fresh matching
+    reasoningRegex.lastIndex = 0;
+    searchingRegex.lastIndex = 0;
 
     // Process reasoning blocks
-    const reasoningRegex = new RegExp(THINKING_PATTERNS.reasoning.source, "gi");
     let reasoningMatch;
-    while ((reasoningMatch = reasoningRegex.exec(text)) !== null) {
+    while ((reasoningMatch = reasoningRegex.exec(processedText)) !== null) {
       const content = reasoningMatch[1]?.trim();
-      console.log("Found reasoning match:", {
-        content: content?.substring(0, 100),
-        index: reasoningMatch.index,
-      });
       if (content) {
         allMatches.push({
           content,
@@ -295,14 +312,9 @@ const ChatPanel: React.FC<ChatPanelProps & ExtraProps> = ({
     }
 
     // Process searching blocks
-    const searchingRegex = new RegExp(THINKING_PATTERNS.searching.source, "gi");
     let searchingMatch;
-    while ((searchingMatch = searchingRegex.exec(text)) !== null) {
+    while ((searchingMatch = searchingRegex.exec(processedText)) !== null) {
       const content = searchingMatch[1]?.trim();
-      console.log("Found searching match:", {
-        content: content?.substring(0, 100),
-        index: searchingMatch.index,
-      });
       if (content) {
         allMatches.push({
           content,
@@ -315,40 +327,30 @@ const ChatPanel: React.FC<ChatPanelProps & ExtraProps> = ({
     // Sort by index to preserve original order
     const thinkingBlocks = allMatches.sort((a, b) => a.index - b.index);
 
-    // Clean the text
-    cleanedText = cleanedText.replace(THINKING_PATTERNS.reasoning, "");
-    cleanedText = cleanedText.replace(THINKING_PATTERNS.searching, "");
+    // Clean the text by removing thinking tags
+    let cleanedText = processedText
+      .replace(THINKING_PATTERNS.reasoning, "")
+      .replace(THINKING_PATTERNS.searching, "")
+      .trim();
 
     // Get last thinking content
     let lastThinkingContent = "Thinking";
     if (thinkingBlocks.length > 0) {
       const lastBlock = thinkingBlocks[thinkingBlocks.length - 1];
-      let content = lastBlock?.content || "Thinking";
-
-      // Clean up the content for display
-      content = content.replace(/\*\*(.*?)\*\*/g, "$1"); // Remove bold
-      content = content.replace(/\*(.*?)\*/g, "$1"); // Remove italics
-      content = content.replace(/\n+/g, " "); // Replace newlines with spaces
-      content = content.replace(/\s+/g, " "); // Normalize whitespace
-      content = content.trim();
-
-      // Limit length to keep UI clean
-      if (content.length > 100) {
-        content = content.substring(0, 100) + "...";
+      if (lastBlock?.content) {
+        lastThinkingContent = cleanContentForDisplay(lastBlock.content);
       }
-
-      lastThinkingContent = content || "Thinking";
     }
 
     return {
-      cleanedText: cleanedText.trim(),
+      cleanedText,
       thinkingBlocks,
       lastThinkingContent,
     };
-  };
+  }, [THINKING_PATTERNS.reasoning, THINKING_PATTERNS.searching, reasoningRegex, searchingRegex, cleanContentForDisplay]);
 
-  // Render thinking blocks with navigation
-  const renderThinkingBlocks = (): JSX.Element | null => {
+  // Memoized render function for thinking blocks with navigation
+  const renderThinkingBlocks = useCallback((): JSX.Element | null => {
     if (thinkingBlocks.length === 0) return null;
 
     const currentBlock = thinkingBlocks[currentThinkingIndex];
@@ -399,7 +401,7 @@ const ChatPanel: React.FC<ChatPanelProps & ExtraProps> = ({
         </div>
       </div>
     );
-  };
+  }, [thinkingBlocks, currentThinkingIndex]);
 
   const getBrowserInfo = () => {
     try {
@@ -1256,6 +1258,7 @@ const ChatPanel: React.FC<ChatPanelProps & ExtraProps> = ({
     lastPrompt,
     lastMessages,
     initialPrompt,
+    processThinkingTags,
   ]);
 
   function hasVerticalScrollbar(element: any) {
