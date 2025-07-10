@@ -977,6 +977,9 @@
   color: var(--title-text-color);
   margin-bottom: var(--spacing-small);
   font-size: 0.9rem;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .thinking-navigation {

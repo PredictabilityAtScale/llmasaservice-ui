@@ -357,13 +357,39 @@ const ChatPanel: React.FC<ChatPanelProps & ExtraProps> = ({
     if (!currentBlock) return null;
 
     const icon = currentBlock.type === "reasoning" ? "🤔" : "🔍";
-    const title = currentBlock.type === "reasoning" ? "Reasoning" : "Searching";
+    const baseTitle = currentBlock.type === "reasoning" ? "Reasoning" : "Searching";
+
+    // Extract title from **[title]** at the beginning of content and strip formatting
+    const extractTitleAndContent = (text: string): { displayTitle: string; content: string } => {
+      // Handle potential whitespace at the beginning and be more flexible with the pattern
+      const trimmedText = text.trim();
+      const titleMatch = trimmedText.match(/^\*\*\[(.*?)\]\*\*/);
+      if (titleMatch) {
+        const extractedTitle = titleMatch[1];
+        // Remove the title pattern and any following whitespace/newlines
+        const remainingContent = trimmedText
+          .replace(/^\*\*\[.*?\]\*\*\s*\n?/, '')
+          .replace(/\*\*(.*?)\*\*/g, '$1')
+          .trim();
+        return {
+          displayTitle: `${baseTitle}: ${extractedTitle}`,
+          content: remainingContent
+        };
+      }
+      // If no title found, just strip bold formatting
+      return {
+        displayTitle: baseTitle,
+        content: trimmedText.replace(/\*\*(.*?)\*\*/g, '$1')
+      };
+    };
+
+    const { displayTitle, content } = extractTitleAndContent(currentBlock.content);
 
     return (
       <div className="thinking-block-container">
         <div className={`thinking-section ${currentBlock.type}-section`}>
           <div className="thinking-header">
-            {icon} {title}
+            {icon} {displayTitle}
             {thinkingBlocks.length > 1 && (
               <div className="thinking-navigation">
                 <button
@@ -397,7 +423,9 @@ const ChatPanel: React.FC<ChatPanelProps & ExtraProps> = ({
               </div>
             )}
           </div>
-          <div className="thinking-content">{currentBlock.content}</div>
+          <div className="thinking-content">
+            {content}
+          </div>
         </div>
       </div>
     );
