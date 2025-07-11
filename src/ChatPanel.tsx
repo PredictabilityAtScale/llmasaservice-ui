@@ -1140,154 +1140,166 @@ const ChatPanel: React.FC<ChatPanelProps & ExtraProps> = ({
     }
   };
 
-  useEffect(() => {
-    if (response && response.length > 0) {
-      console.log("Response updated:", {
-        length: response.length,
-        isLoading,
-        idle,
-        hasReasoningTags: response.includes("<reasoning>"),
-        hasSearchingTags: response.includes("<searching>"),
-        preview: response.substring(0, 200) + "...",
-      });
+useEffect(() => {
+  if (response && response.length > 0) {
+    console.log("Response updated:", {
+      length: response.length,
+      isLoading,
+      idle,
+      hasReasoningTags: response.includes("<reasoning>"),
+      hasSearchingTags: response.includes("<searching>"),
+      preview: response.substring(0, 200) + "...",
+    });
 
-      setIsLoading(false);
+    setIsLoading(false);
 
-      // Process thinking tags and get cleaned response
-      const { cleanedText, thinkingBlocks: newThinkingBlocks } =
-        processThinkingTags(response);
+    // Step 1: Detect tool requests from the original response BEFORE any cleaning
+    const toolRequests: { match: string; groups: any[]; toolName: string }[] = [];
 
-      // Replace the blocks entirely (don't append) to avoid duplicates during streaming
-      setThinkingBlocks(newThinkingBlocks);
-      // Always show the latest (last) thinking block
-      setCurrentThinkingIndex(Math.max(0, newThinkingBlocks.length - 1));
-
-      let newResponse = cleanedText;
-
-      const toolRequests: { match: string; groups: any[]; toolName: string }[] =
-        [];
-
-      if (allActions && allActions.length > 0) {
-        // Detect all tool requests first (use original response for tool detection)
-        allActions
-          .filter((a) => a.actionType === "tool")
-          .forEach((action) => {
-            const regex = new RegExp(action.pattern, "gmi");
-            let match;
-            const content = response; // Use original response for tool detection
-
-            // Use exec in a loop to find all matches
-            while ((match = regex.exec(content)) !== null) {
-              toolRequests.push({
-                match: match[0],
-                groups: Array.from(match).slice(1),
-                toolName: match[2] ?? "tool", // Tool name should always in the 2nd capture group
-              });
-            }
-          });
-
-        allActions
-          .filter((a) => a.type !== "response")
-          .forEach((action, index) => {
-            const regex = new RegExp(action.pattern, "gmi");
-            newResponse = newResponse.replace(regex, (match, ...groups) => {
-              console.log("action match", match, groups);
-
-              const matchIndex = groups[groups.length - 2];
-              const buttonId = `button-${messages.length}-${index}-${matchIndex}`;
-
-              let html = match;
-              if (action.type === "button" || action.type === "callback") {
-                html = `<br /><button id="${buttonId}" ${
-                  action.style ? 'class="' + action.style + '"' : ""
-                }>
-                ${action.markdown ?? match}
-              </button>`;
-              } else if (action.type === "markdown" || action.type === "html") {
-                html = action.markdown ?? "";
-              }
-
-              html = html.replace(new RegExp("\\$match", "gmi"), match);
-              groups.forEach((group, index) => {
-                html = html.replace(
-                  new RegExp(`\\$${index + 1}`, "gmi"),
-                  group
-                );
-              });
-
-              setTimeout(() => {
-                const button = document.getElementById(buttonId);
-                if (button) {
-                  if (!button.onclick) {
-                    // Get the context directly from the map when the button is clicked
-                    button.onclick = () => {
-                      if (action.callback) {
-                        action.callback(match, groups);
-                      }
-
-                      if (action.clickCode) {
-                        try {
-                          const func = new Function("match", action.clickCode);
-                          func(match);
-                          interactionClicked(lastCallId, "action");
-                        } catch (error) {
-                          console.error("Error executing clickCode:", error);
-                        }
-                      }
-                    };
-                  }
-                }
-              }, 0);
-
-              return html;
+    if (allActions && allActions.length > 0) {
+      allActions
+        .filter((a) => a.actionType === "tool")
+        .forEach((action) => {
+          const regex = new RegExp(action.pattern, "gmi");
+          let match;
+          // Use original response for tool detection
+          while ((match = regex.exec(response)) !== null) {
+            toolRequests.push({
+              match: match[0],
+              groups: Array.from(match).slice(1),
+              toolName: match[2] ?? "tool", // Tool name should always in the 2nd capture group
             });
-          });
-      }
-
-      if (toolRequests.length > 0) {
-        console.log("toolRequests", toolRequests);
-        setPendingToolRequests(toolRequests);
-      } else {
-        setPendingToolRequests([]);
-      }
-
-      // Store the cleaned response (without reasoning/searching tags)
-      console.log("Storing cleaned response to history:", {
-        originalLength: response.length,
-        cleanedLength: newResponse.length,
-        hasReasoningTags: response.includes("<reasoning>"),
-        hasSearchingTags: response.includes("<searching>"),
-        preview: newResponse.substring(0, 200) + "...",
-      });
-
-      setHistory((prevHistory) => {
-        // Get any existing tool data from the previous state
-        const existingEntry = prevHistory[lastKey ?? ""] || {
-          content: "",
-          callId: "",
-        };
-
-        return {
-          ...prevHistory,
-          [lastKey ?? ""]: {
-            ...existingEntry, // This preserves toolCalls and toolResponses
-            content: newResponse, // Store cleaned response without thinking tags
-            callId: lastCallId,
-          },
-        };
-      });
+          }
+        });
     }
-  }, [
-    response,
-    allActions,
-    lastKey,
-    lastCallId,
-    messages.length,
-    lastPrompt,
-    lastMessages,
-    initialPrompt,
-    processThinkingTags,
-  ]);
+
+    // Set tool requests immediately after detection
+    if (toolRequests.length > 0) {
+      console.log("toolRequests", toolRequests);
+      setPendingToolRequests(toolRequests);
+    } else {
+      setPendingToolRequests([]);
+    }
+
+    // Step 2: Remove tool JSON patterns from response for display
+    let responseWithoutTools = response;
+    if (allActions && allActions.length > 0) {
+      allActions
+        .filter((a) => a.actionType === "tool")
+        .forEach((action) => {
+          const regex = new RegExp(action.pattern, "gmi");
+          responseWithoutTools = responseWithoutTools.replace(regex, "");
+        });
+    }
+
+    // Step 3: Process thinking tags on the response without tool JSON
+    const { cleanedText, thinkingBlocks: newThinkingBlocks } =
+      processThinkingTags(responseWithoutTools);
+
+    // Replace the blocks entirely (don't append) to avoid duplicates during streaming
+    setThinkingBlocks(newThinkingBlocks);
+    // Always show the latest (last) thinking block
+    setCurrentThinkingIndex(Math.max(0, newThinkingBlocks.length - 1));
+
+    // Step 4: Process other non-tool actions on the cleaned response
+    let newResponse = cleanedText;
+
+    if (allActions && allActions.length > 0) {
+      allActions
+        .filter((a) => a.type !== "response" && a.actionType !== "tool")
+        .forEach((action, index) => {
+          const regex = new RegExp(action.pattern, "gmi");
+          newResponse = newResponse.replace(regex, (match, ...groups) => {
+            console.log("action match", match, groups);
+
+            const matchIndex = groups[groups.length - 2];
+            const buttonId = `button-${messages.length}-${index}-${matchIndex}`;
+
+            let html = match;
+            if (action.type === "button" || action.type === "callback") {
+              html = `<br /><button id="${buttonId}" ${
+                action.style ? 'class="' + action.style + '"' : ""
+              }>
+              ${action.markdown ?? match}
+            </button>`;
+            } else if (action.type === "markdown" || action.type === "html") {
+              html = action.markdown ?? "";
+            }
+
+            html = html.replace(new RegExp("\\$match", "gmi"), match);
+            groups.forEach((group, index) => {
+              html = html.replace(
+                new RegExp(`\\$${index + 1}`, "gmi"),
+                group
+              );
+            });
+
+            setTimeout(() => {
+              const button = document.getElementById(buttonId);
+              if (button) {
+                if (!button.onclick) {
+                  // Get the context directly from the map when the button is clicked
+                  button.onclick = () => {
+                    if (action.callback) {
+                      action.callback(match, groups);
+                    }
+
+                    if (action.clickCode) {
+                      try {
+                        const func = new Function("match", action.clickCode);
+                        func(match);
+                        interactionClicked(lastCallId, "action");
+                      } catch (error) {
+                        console.error("Error executing clickCode:", error);
+                      }
+                    }
+                  };
+                }
+              }
+            }, 0);
+
+            return html;
+          });
+        });
+    }
+
+    // Store the cleaned response (without reasoning/searching tags and without tool JSON)
+    console.log("Storing cleaned response to history:", {
+      originalLength: response.length,
+      cleanedLength: newResponse.length,
+      hasReasoningTags: response.includes("<reasoning>"),
+      hasSearchingTags: response.includes("<searching>"),
+      preview: newResponse.substring(0, 200) + "...",
+    });
+
+    setHistory((prevHistory) => {
+      // Get any existing tool data from the previous state
+      const existingEntry = prevHistory[lastKey ?? ""] || {
+        content: "",
+        callId: "",
+      };
+
+      return {
+        ...prevHistory,
+        [lastKey ?? ""]: {
+          ...existingEntry, // This preserves toolCalls and toolResponses
+          content: newResponse, // Store cleaned response without thinking tags or tool JSON
+          callId: lastCallId,
+        },
+      };
+    });
+  }
+}, [
+  response,
+  allActions,
+  lastKey,
+  lastCallId,
+  messages.length,
+  lastPrompt,
+  lastMessages,
+  initialPrompt,
+  processThinkingTags,
+]);
 
   function hasVerticalScrollbar(element: any) {
     return element.scrollHeight > element.clientHeight;
