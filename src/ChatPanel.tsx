@@ -214,6 +214,14 @@ const ChatPanel: React.FC<ChatPanelProps & ExtraProps> = ({
   >([]);
   const [currentThinkingIndex, setCurrentThinkingIndex] = useState(0);
 
+  // State for pending button attachments
+  const [pendingButtonAttachments, setPendingButtonAttachments] = useState<Array<{
+    buttonId: string;
+    action: any;
+    match: string;
+    groups: any[];
+  }>>([]);
+
   // load “always” approvals
   useEffect(() => {
     const stored = localStorage.getItem("alwaysApprovedTools");
@@ -238,14 +246,23 @@ const ChatPanel: React.FC<ChatPanelProps & ExtraProps> = ({
   const responseAreaRef = useRef(null);
 
   // Memoized regex patterns to avoid recreation on every render
-  const THINKING_PATTERNS = useMemo(() => ({
-    reasoning: /<reasoning>([\s\S]*?)<\/reasoning>/gi,
-    searching: /<searching>([\s\S]*?)<\/searching>/gi,
-  }), []);
+  const THINKING_PATTERNS = useMemo(
+    () => ({
+      reasoning: /<reasoning>([\s\S]*?)<\/reasoning>/gi,
+      searching: /<searching>([\s\S]*?)<\/searching>/gi,
+    }),
+    []
+  );
 
   // Memoized regex instances for better performance
-  const reasoningRegex = useMemo(() => new RegExp(THINKING_PATTERNS.reasoning.source, "gi"), [THINKING_PATTERNS.reasoning.source]);
-  const searchingRegex = useMemo(() => new RegExp(THINKING_PATTERNS.searching.source, "gi"), [THINKING_PATTERNS.searching.source]);
+  const reasoningRegex = useMemo(
+    () => new RegExp(THINKING_PATTERNS.reasoning.source, "gi"),
+    [THINKING_PATTERNS.reasoning.source]
+  );
+  const searchingRegex = useMemo(
+    () => new RegExp(THINKING_PATTERNS.searching.source, "gi"),
+    [THINKING_PATTERNS.searching.source]
+  );
 
   // Memoized content cleaning function
   const cleanContentForDisplay = useCallback((content: string): string => {
@@ -265,89 +282,98 @@ const ChatPanel: React.FC<ChatPanelProps & ExtraProps> = ({
   }, []);
 
   // Optimized function to extract thinking blocks in order
-  const processThinkingTags = useCallback((
-    text: string
-  ): {
-    cleanedText: string;
-    thinkingBlocks: Array<{
-      type: "reasoning" | "searching";
-      content: string;
-      index: number;
-    }>;
-    lastThinkingContent: string;
-  } => {
-    if (!text) {
+  const processThinkingTags = useCallback(
+    (
+      text: string
+    ): {
+      cleanedText: string;
+      thinkingBlocks: Array<{
+        type: "reasoning" | "searching";
+        content: string;
+        index: number;
+      }>;
+      lastThinkingContent: string;
+    } => {
+      if (!text) {
+        return {
+          cleanedText: "",
+          thinkingBlocks: [],
+          lastThinkingContent: "Thinking",
+        };
+      }
+
+      // Remove zero-width space characters from keepalive before processing
+      // This prevents them from interfering with thinking block extraction
+      const processedText = text.replace(/\u200B/g, "");
+
+      const allMatches: Array<{
+        content: string;
+        index: number;
+        type: "reasoning" | "searching";
+      }> = [];
+
+      // Reset regex state for fresh matching
+      reasoningRegex.lastIndex = 0;
+      searchingRegex.lastIndex = 0;
+
+      // Process reasoning blocks
+      let reasoningMatch;
+      while ((reasoningMatch = reasoningRegex.exec(processedText)) !== null) {
+        const content = reasoningMatch[1]?.trim();
+        if (content) {
+          allMatches.push({
+            content,
+            index: reasoningMatch.index,
+            type: "reasoning",
+          });
+        }
+      }
+
+      // Process searching blocks
+      let searchingMatch;
+      while ((searchingMatch = searchingRegex.exec(processedText)) !== null) {
+        const content = searchingMatch[1]?.trim();
+        if (content) {
+          allMatches.push({
+            content,
+            index: searchingMatch.index,
+            type: "searching",
+          });
+        }
+      }
+
+      // Sort by index to preserve original order
+      const thinkingBlocks = allMatches.sort((a, b) => a.index - b.index);
+
+      // Clean the text by removing thinking tags
+      let cleanedText = processedText
+        .replace(THINKING_PATTERNS.reasoning, "")
+        .replace(THINKING_PATTERNS.searching, "")
+        .trim();
+
+      // Get last thinking content
+      let lastThinkingContent = "Thinking";
+      if (thinkingBlocks.length > 0) {
+        const lastBlock = thinkingBlocks[thinkingBlocks.length - 1];
+        if (lastBlock?.content) {
+          lastThinkingContent = cleanContentForDisplay(lastBlock.content);
+        }
+      }
+
       return {
-        cleanedText: "",
-        thinkingBlocks: [],
-        lastThinkingContent: "Thinking",
+        cleanedText,
+        thinkingBlocks,
+        lastThinkingContent,
       };
-    }
-
-    // Remove zero-width space characters from keepalive before processing
-    // This prevents them from interfering with thinking block extraction
-    const processedText = text.replace(/\u200B/g, "");
-
-    const allMatches: Array<{
-      content: string;
-      index: number;
-      type: "reasoning" | "searching";
-    }> = [];
-
-    // Reset regex state for fresh matching
-    reasoningRegex.lastIndex = 0;
-    searchingRegex.lastIndex = 0;
-
-    // Process reasoning blocks
-    let reasoningMatch;
-    while ((reasoningMatch = reasoningRegex.exec(processedText)) !== null) {
-      const content = reasoningMatch[1]?.trim();
-      if (content) {
-        allMatches.push({
-          content,
-          index: reasoningMatch.index,
-          type: "reasoning",
-        });
-      }
-    }
-
-    // Process searching blocks
-    let searchingMatch;
-    while ((searchingMatch = searchingRegex.exec(processedText)) !== null) {
-      const content = searchingMatch[1]?.trim();
-      if (content) {
-        allMatches.push({
-          content,
-          index: searchingMatch.index,
-          type: "searching",
-        });
-      }
-    }
-
-    // Sort by index to preserve original order
-    const thinkingBlocks = allMatches.sort((a, b) => a.index - b.index);
-
-    // Clean the text by removing thinking tags
-    let cleanedText = processedText
-      .replace(THINKING_PATTERNS.reasoning, "")
-      .replace(THINKING_PATTERNS.searching, "")
-      .trim();
-
-    // Get last thinking content
-    let lastThinkingContent = "Thinking";
-    if (thinkingBlocks.length > 0) {
-      const lastBlock = thinkingBlocks[thinkingBlocks.length - 1];
-      if (lastBlock?.content) {
-        lastThinkingContent = cleanContentForDisplay(lastBlock.content);
-      }
-    }
-
-    return {
-      cleanedText,
-      thinkingBlocks,
-      lastThinkingContent,
-    };
-  }, [THINKING_PATTERNS.reasoning, THINKING_PATTERNS.searching, reasoningRegex, searchingRegex, cleanContentForDisplay]);
+    },
+    [
+      THINKING_PATTERNS.reasoning,
+      THINKING_PATTERNS.searching,
+      reasoningRegex,
+      searchingRegex,
+      cleanContentForDisplay,
+    ]
+  );
 
   // Memoized render function for thinking blocks with navigation
   const renderThinkingBlocks = useCallback((): JSX.Element | null => {
@@ -357,10 +383,13 @@ const ChatPanel: React.FC<ChatPanelProps & ExtraProps> = ({
     if (!currentBlock) return null;
 
     const icon = currentBlock.type === "reasoning" ? "🤔" : "🔍";
-    const baseTitle = currentBlock.type === "reasoning" ? "Reasoning" : "Searching";
+    const baseTitle =
+      currentBlock.type === "reasoning" ? "Reasoning" : "Searching";
 
     // Extract title from **[title]** at the beginning of content and strip formatting
-    const extractTitleAndContent = (text: string): { displayTitle: string; content: string } => {
+    const extractTitleAndContent = (
+      text: string
+    ): { displayTitle: string; content: string } => {
       // Handle potential whitespace at the beginning and be more flexible with the pattern
       const trimmedText = text.trim();
       const titleMatch = trimmedText.match(/^\*\*\[(.*?)\]\*\*/);
@@ -368,22 +397,24 @@ const ChatPanel: React.FC<ChatPanelProps & ExtraProps> = ({
         const extractedTitle = titleMatch[1];
         // Remove the title pattern and any following whitespace/newlines
         const remainingContent = trimmedText
-          .replace(/^\*\*\[.*?\]\*\*\s*\n?/, '')
-          .replace(/\*\*(.*?)\*\*/g, '$1')
+          .replace(/^\*\*\[.*?\]\*\*\s*\n?/, "")
+          .replace(/\*\*(.*?)\*\*/g, "$1")
           .trim();
         return {
           displayTitle: `${baseTitle}: ${extractedTitle}`,
-          content: remainingContent
+          content: remainingContent,
         };
       }
       // If no title found, just strip bold formatting
       return {
         displayTitle: baseTitle,
-        content: trimmedText.replace(/\*\*(.*?)\*\*/g, '$1')
+        content: trimmedText.replace(/\*\*(.*?)\*\*/g, "$1"),
       };
     };
 
-    const { displayTitle, content } = extractTitleAndContent(currentBlock.content);
+    const { displayTitle, content } = extractTitleAndContent(
+      currentBlock.content
+    );
 
     return (
       <div className="thinking-block-container">
@@ -423,9 +454,7 @@ const ChatPanel: React.FC<ChatPanelProps & ExtraProps> = ({
               </div>
             )}
           </div>
-          <div className="thinking-content">
-            {content}
-          </div>
+          <div className="thinking-content">{content}</div>
         </div>
       </div>
     );
@@ -817,7 +846,7 @@ const ChatPanel: React.FC<ChatPanelProps & ExtraProps> = ({
   // google doesn't return an id, so we just grab functioCall
   const google_toolAction = {
     pattern:
-      '^\\{\\s*"(functionCall)"\\s*:\\s*\\{\\s*"name"\\s*:\\s*"([^"]+)"\\s*,\\s*"args"\\s*:\\s*(\\{[^}]+\\})\\s*\\}\\s*,\\s*"service"\\s*:\\s*"([^"]+)"\\s*\\}$',
+      '^\\{\\s*"(functionCall)"\\s*:\\s*\\{\\s*"name"\\s*:\\s*"([^"]+)"\\s*,\\s*"args"\\s*:\\s*(\\{[^}]+\\})\\s*\\}(?:\\s*,\\s*"thoughtSignature"\\s*:\\s*"[^"]*")?\\s*,\\s*"service"\\s*:\\s*"([^"]+)"\\s*\\}$',
     type: "markdown",
     markdown: "<br />*Tool use requested: $2*",
     actionType: "tool",
@@ -1140,166 +1169,329 @@ const ChatPanel: React.FC<ChatPanelProps & ExtraProps> = ({
     }
   };
 
-useEffect(() => {
-  if (response && response.length > 0) {
-    console.log("Response updated:", {
-      length: response.length,
-      isLoading,
-      idle,
-      hasReasoningTags: response.includes("<reasoning>"),
-      hasSearchingTags: response.includes("<searching>"),
-      preview: response.substring(0, 200) + "...",
-    });
+  useEffect(() => {
+    if (response && response.length > 0) {
+      console.log("Response updated:", {
+        length: response.length,
+        isLoading,
+        idle,
+        hasReasoningTags: response.includes("<reasoning>"),
+        hasSearchingTags: response.includes("<searching>"),
+        preview: response.substring(0, 200) + "...",
+      });
 
-    setIsLoading(false);
+      setIsLoading(false);
 
-    // Step 1: Detect tool requests from the original response BEFORE any cleaning
-    const toolRequests: { match: string; groups: any[]; toolName: string }[] = [];
+      // Step 1: Detect tool requests from the original response BEFORE any cleaning
+      const toolRequests: { match: string; groups: any[]; toolName: string }[] =
+        [];
 
-    if (allActions && allActions.length > 0) {
-      allActions
-        .filter((a) => a.actionType === "tool")
-        .forEach((action) => {
-          const regex = new RegExp(action.pattern, "gmi");
-          let match;
-          // Use original response for tool detection
-          while ((match = regex.exec(response)) !== null) {
-            toolRequests.push({
-              match: match[0],
-              groups: Array.from(match).slice(1),
-              toolName: match[2] ?? "tool", // Tool name should always in the 2nd capture group
-            });
-          }
-        });
-    }
+      if (allActions && allActions.length > 0) {
+        allActions
+          .filter((a) => a.actionType === "tool")
+          .forEach((action) => {
+            const regex = new RegExp(action.pattern, "gmi");
+            let match;
+            // Use original response for tool detection
+            while ((match = regex.exec(response)) !== null) {
+              toolRequests.push({
+                match: match[0],
+                groups: Array.from(match).slice(1),
+                toolName: match[2] ?? "tool", // Tool name should always in the 2nd capture group
+              });
+            }
+          });
+      }
 
-    // Set tool requests immediately after detection
-    if (toolRequests.length > 0) {
-      console.log("toolRequests", toolRequests);
-      setPendingToolRequests(toolRequests);
-    } else {
-      setPendingToolRequests([]);
-    }
+      // Set tool requests immediately after detection
+      if (toolRequests.length > 0) {
+        console.log("toolRequests", toolRequests);
+        setPendingToolRequests(toolRequests);
+      } else {
+        setPendingToolRequests([]);
+      }
 
-    // Step 2: Remove tool JSON patterns from response for display
-    let responseWithoutTools = response;
-    if (allActions && allActions.length > 0) {
-      allActions
-        .filter((a) => a.actionType === "tool")
-        .forEach((action) => {
-          const regex = new RegExp(action.pattern, "gmi");
-          responseWithoutTools = responseWithoutTools.replace(regex, "");
-        });
-    }
+      // Step 2: Remove tool JSON patterns from response for display
+      let responseWithoutTools = response;
+      if (allActions && allActions.length > 0) {
+        allActions
+          .filter((a) => a.actionType === "tool")
+          .forEach((action) => {
+            const regex = new RegExp(action.pattern, "gmi");
+            responseWithoutTools = responseWithoutTools.replace(regex, "");
+          });
+      }
 
-    // Step 3: Process thinking tags on the response without tool JSON
-    const { cleanedText, thinkingBlocks: newThinkingBlocks } =
-      processThinkingTags(responseWithoutTools);
+      // Step 3: Process thinking tags on the response without tool JSON
+      const { cleanedText, thinkingBlocks: newThinkingBlocks } =
+        processThinkingTags(responseWithoutTools);
 
-    // Replace the blocks entirely (don't append) to avoid duplicates during streaming
-    setThinkingBlocks(newThinkingBlocks);
-    // Always show the latest (last) thinking block
-    setCurrentThinkingIndex(Math.max(0, newThinkingBlocks.length - 1));
+      // Replace the blocks entirely (don't append) to avoid duplicates during streaming
+      setThinkingBlocks(newThinkingBlocks);
+      // Always show the latest (last) thinking block
+      setCurrentThinkingIndex(Math.max(0, newThinkingBlocks.length - 1));
 
-    // Step 4: Process other non-tool actions on the cleaned response
-    let newResponse = cleanedText;
+      // Step 4: Process other non-tool actions on the cleaned response
+      let newResponse = cleanedText;
 
-    if (allActions && allActions.length > 0) {
-      allActions
-        .filter((a) => a.type !== "response" && a.actionType !== "tool")
-        .forEach((action, index) => {
-          const regex = new RegExp(action.pattern, "gmi");
-          newResponse = newResponse.replace(regex, (match, ...groups) => {
-            console.log("action match", match, groups);
+      console.log("[BUTTON DEBUG] Starting action processing:", {
+        actionsCount: allActions?.length || 0,
+        nonToolActions: allActions?.filter((a) => a.type !== "response" && a.actionType !== "tool").length || 0,
+        cleanedTextLength: cleanedText.length,
+        messagesLength: messages.length
+      });
 
-            const matchIndex = groups[groups.length - 2];
-            const buttonId = `button-${messages.length}-${index}-${matchIndex}`;
+      if (allActions && allActions.length > 0) {
+        allActions
+          .filter((a) => a.type !== "response" && a.actionType !== "tool")
+          .forEach((action, index) => {
+            const regex = new RegExp(action.pattern, "gmi");
+            newResponse = newResponse.replace(regex, (match, ...groups) => {
+              console.log("action match", match, groups);
 
-            let html = match;
-            if (action.type === "button" || action.type === "callback") {
-              html = `<br /><button id="${buttonId}" ${
-                action.style ? 'class="' + action.style + '"' : ""
-              }>
+              const matchIndex = groups[groups.length - 2];
+              const buttonId = `button-${messages.length}-${index}-${matchIndex}`;
+
+              let html = match;
+              if (action.type === "button" || action.type === "callback") {
+                html = `<br /><button id="${buttonId}" ${
+                  action.style ? 'class="' + action.style + '"' : ""
+                }>
               ${action.markdown ?? match}
             </button>`;
-            } else if (action.type === "markdown" || action.type === "html") {
-              html = action.markdown ?? "";
-            }
-
-            html = html.replace(new RegExp("\\$match", "gmi"), match);
-            groups.forEach((group, index) => {
-              html = html.replace(
-                new RegExp(`\\$${index + 1}`, "gmi"),
-                group
-              );
-            });
-
-            setTimeout(() => {
-              const button = document.getElementById(buttonId);
-              if (button) {
-                if (!button.onclick) {
-                  // Get the context directly from the map when the button is clicked
-                  button.onclick = () => {
-                    if (action.callback) {
-                      action.callback(match, groups);
-                    }
-
-                    if (action.clickCode) {
-                      try {
-                        const func = new Function("match", action.clickCode);
-                        func(match);
-                        interactionClicked(lastCallId, "action");
-                      } catch (error) {
-                        console.error("Error executing clickCode:", error);
-                      }
-                    }
-                  };
-                }
+                
+                console.log("[BUTTON DEBUG] Generated button HTML:", {
+                  buttonId,
+                  html: html.substring(0, 200) + "...",
+                  actionType: action.type
+                });
+              } else if (action.type === "markdown" || action.type === "html") {
+                html = action.markdown ?? "";
               }
-            }, 0);
 
-            return html;
+              html = html.replace(new RegExp("\\$match", "gmi"), match);
+              groups.forEach((group, index) => {
+                html = html.replace(
+                  new RegExp(`\\$${index + 1}`, "gmi"),
+                  group
+                );
+              });
+
+              // Store the button context for later attachment
+              const buttonContext = {
+                buttonId,
+                action,
+                match,
+                groups
+              };
+
+              // Add debug logging for button creation
+              console.log("[BUTTON DEBUG] Button created:", {
+                buttonId,
+                actionType: action.type,
+                actionPattern: action.pattern,
+                hasCallback: !!action.callback,
+                hasClickCode: !!action.clickCode,
+                match,
+                groups
+              });
+
+              // Add this to state to track pending button attachments
+              setPendingButtonAttachments(prev => [...prev, buttonContext]);
+
+              return html;
+            });
           });
+      }
+
+      // Store the cleaned response (without reasoning/searching tags and without tool JSON)
+      console.log("Storing cleaned response to history:", {
+        originalLength: response.length,
+        cleanedLength: newResponse.length,
+        hasReasoningTags: response.includes("<reasoning>"),
+        hasSearchingTags: response.includes("<searching>"),
+        preview: newResponse.substring(0, 200) + "...",
+      });
+
+      setHistory((prevHistory) => {
+        // Get any existing tool data from the previous state
+        const existingEntry = prevHistory[lastKey ?? ""] || {
+          content: "",
+          callId: "",
+        };
+
+        const updatedHistory = {
+          ...prevHistory,
+          [lastKey ?? ""]: {
+            ...existingEntry, // This preserves toolCalls and toolResponses
+            content: newResponse, // Store cleaned response without thinking tags or tool JSON
+            callId: lastCallId,
+          },
+        };
+
+        console.log("[BUTTON DEBUG] History updated with content:", {
+          key: lastKey,
+          contentLength: newResponse.length,
+          contentPreview: newResponse.substring(0, 300) + "...",
+          hasButtonTags: newResponse.includes("<button"),
+          buttonMatches: (newResponse.match(/<button[^>]*>/g) || []).length
         });
+
+        return updatedHistory;
+      });
     }
+  }, [
+    response,
+    allActions,
+    lastKey,
+    lastCallId,
+    messages.length,
+    lastPrompt,
+    lastMessages,
+    initialPrompt,
+    processThinkingTags,
+  ]);
 
-    // Store the cleaned response (without reasoning/searching tags and without tool JSON)
-    console.log("Storing cleaned response to history:", {
-      originalLength: response.length,
-      cleanedLength: newResponse.length,
-      hasReasoningTags: response.includes("<reasoning>"),
-      hasSearchingTags: response.includes("<searching>"),
-      preview: newResponse.substring(0, 200) + "...",
-    });
+  // Handle button attachments after history updates
+  useEffect(() => {
+    if (pendingButtonAttachments.length > 0) {
+      console.log("[BUTTON DEBUG] Starting button attachment process:", {
+        pendingCount: pendingButtonAttachments.length,
+        pendingButtons: pendingButtonAttachments.map(b => ({
+          buttonId: b.buttonId,
+          actionType: b.action.type,
+          hasCallback: !!b.action.callback,
+          hasClickCode: !!b.action.clickCode
+        }))
+      });
 
-    setHistory((prevHistory) => {
-      // Get any existing tool data from the previous state
-      const existingEntry = prevHistory[lastKey ?? ""] || {
-        content: "",
-        callId: "",
+      // Use a longer delay to ensure DOM has been updated after React re-render
+      const timeoutId = setTimeout(() => {
+        let attachedCount = 0;
+        let notFoundCount = 0;
+        let alreadyAttachedCount = 0;
+
+        // First, let's see what buttons actually exist in the DOM
+        const allButtonsInDOM = document.querySelectorAll('button');
+        const buttonIdsInDOM = Array.from(allButtonsInDOM).map(btn => btn.id).filter(id => id);
+        
+        console.log("[BUTTON DEBUG] DOM state before attachment:", {
+          totalButtonsInDOM: allButtonsInDOM.length,
+          buttonIdsInDOM,
+          pendingButtonIds: pendingButtonAttachments.map(b => b.buttonId),
+          documentReady: document.readyState,
+          bodyHTML: document.body.innerHTML.includes('<button') ? 'Contains buttons' : 'No buttons found'
+        });
+
+        pendingButtonAttachments.forEach(({ buttonId, action, match, groups }) => {
+          const button = document.getElementById(buttonId);
+          
+          console.log("[BUTTON DEBUG] Processing button:", {
+            buttonId,
+            buttonExists: !!button,
+            hasExistingOnclick: button ? !!button.onclick : false,
+            actionType: action.type,
+            buttonInnerHTML: button ? button.innerHTML : 'N/A',
+            buttonParent: button ? button.parentElement?.tagName : 'N/A'
+          });
+
+          if (button) {
+            if (!button.onclick) {
+              button.onclick = () => {
+                console.log("[BUTTON DEBUG] Button clicked:", {
+                  buttonId,
+                  actionType: action.type,
+                  hasCallback: !!action.callback,
+                  hasClickCode: !!action.clickCode,
+                  match,
+                  groups
+                });
+
+                if (action.callback) {
+                  console.log("[BUTTON DEBUG] Executing callback for:", buttonId);
+                  action.callback(match, groups);
+                }
+
+                if (action.clickCode) {
+                  try {
+                    console.log("[BUTTON DEBUG] Executing clickCode for:", buttonId);
+                    const func = new Function("match", action.clickCode);
+                    func(match);
+                    interactionClicked(lastCallId, "action");
+                  } catch (error) {
+                    console.error("[BUTTON DEBUG] Error executing clickCode:", error);
+                  }
+                }
+              };
+              attachedCount++;
+              console.log("[BUTTON DEBUG] Successfully attached click handler to:", buttonId);
+            } else {
+              alreadyAttachedCount++;
+              console.log("[BUTTON DEBUG] Button already has click handler:", buttonId);
+            }
+          } else {
+            notFoundCount++;
+            console.log("[BUTTON DEBUG] Button not found in DOM:", buttonId);
+          }
+        });
+
+        console.log("[BUTTON DEBUG] Attachment summary:", {
+          totalProcessed: pendingButtonAttachments.length,
+          attached: attachedCount,
+          notFound: notFoundCount,
+          alreadyAttached: alreadyAttachedCount
+        });
+        
+        // Clear the pending attachments
+        setPendingButtonAttachments([]);
+      }, 100); // Increased timeout to 100ms
+
+      // Cleanup timeout if component unmounts or effect re-runs
+      return () => clearTimeout(timeoutId);
+    }
+  }, [history, pendingButtonAttachments, lastCallId]); // Trigger after history updates
+
+  // Debug function to check DOM state - you can call this from browser console
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      (window as any).debugChatPanelButtons = () => {
+        const allButtons = document.querySelectorAll('button[id^="button-"]');
+        const allButtonsAny = document.querySelectorAll('button');
+        const buttonInfo = Array.from(allButtons).map(button => ({
+          id: button.id,
+          hasOnclick: !!(button as HTMLButtonElement).onclick,
+          textContent: button.textContent?.substring(0, 50),
+          visible: (button as HTMLElement).offsetParent !== null,
+          inDOM: document.contains(button),
+          parentElement: button.parentElement?.tagName,
+          outerHTML: button.outerHTML.substring(0, 200)
+        }));
+        
+        console.log("[BUTTON DEBUG] Current DOM button state:", {
+          totalButtons: allButtonsAny.length,
+          actionButtons: allButtons.length,
+          pendingAttachments: pendingButtonAttachments.length,
+          historyKeys: Object.keys(history),
+          buttons: buttonInfo,
+          documentReady: document.readyState,
+          bodyContainsButtons: document.body.innerHTML.includes('<button')
+        });
+        
+        // Also log the current history content
+        console.log("[BUTTON DEBUG] Current history content:", 
+          Object.entries(history).map(([key, entry]) => ({
+            key,
+            contentLength: entry.content?.length || 0,
+            hasButtons: entry.content?.includes('<button') || false,
+            buttonCount: (entry.content?.match(/<button[^>]*>/g) || []).length,
+            contentPreview: entry.content?.substring(0, 300) + "..."
+          }))
+        );
+        
+        return buttonInfo;
       };
-
-      return {
-        ...prevHistory,
-        [lastKey ?? ""]: {
-          ...existingEntry, // This preserves toolCalls and toolResponses
-          content: newResponse, // Store cleaned response without thinking tags or tool JSON
-          callId: lastCallId,
-        },
-      };
-    });
-  }
-}, [
-  response,
-  allActions,
-  lastKey,
-  lastCallId,
-  messages.length,
-  lastPrompt,
-  lastMessages,
-  initialPrompt,
-  processThinkingTags,
-]);
+    }
+  }, [pendingButtonAttachments, history]);
 
   function hasVerticalScrollbar(element: any) {
     return element.scrollHeight > element.clientHeight;
