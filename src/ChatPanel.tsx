@@ -215,12 +215,14 @@ const ChatPanel: React.FC<ChatPanelProps & ExtraProps> = ({
   const [currentThinkingIndex, setCurrentThinkingIndex] = useState(0);
 
   // State for pending button attachments
-  const [pendingButtonAttachments, setPendingButtonAttachments] = useState<Array<{
-    buttonId: string;
-    action: any;
-    match: string;
-    groups: any[];
-  }>>([]);
+  const [pendingButtonAttachments, setPendingButtonAttachments] = useState<
+    Array<{
+      buttonId: string;
+      action: any;
+      match: string;
+      groups: any[];
+    }>
+  >([]);
 
   // load “always” approvals
   useEffect(() => {
@@ -829,7 +831,7 @@ const ChatPanel: React.FC<ChatPanelProps & ExtraProps> = ({
 
   const anthropic_toolAction = {
     pattern:
-      '\\{"type":"tool_use","id":"([^"]+)","name":"([^"]+)","input":(\\{[^}]+\\}),"service":"([^"]+)"\\}',
+      '\\{"type":"tool_use","id":"([^"]+)","name":"([^"]+)","input":(\\{[\\s\\S]+?\\}),"service":"([^"]+)"\\}',
     type: "markdown",
     markdown: "<br />*Tool use requested: $2*",
     actionType: "tool",
@@ -846,7 +848,7 @@ const ChatPanel: React.FC<ChatPanelProps & ExtraProps> = ({
   // google doesn't return an id, so we just grab functioCall
   const google_toolAction = {
     pattern:
-      '^\\{\\s*"(functionCall)"\\s*:\\s*\\{\\s*"name"\\s*:\\s*"([^"]+)"\\s*,\\s*"args"\\s*:\\s*(\\{[^}]+\\})\\s*\\}(?:\\s*,\\s*"thoughtSignature"\\s*:\\s*"[^"]*")?\\s*,\\s*"service"\\s*:\\s*"([^"]+)"\\s*\\}$',
+      '^\\{\\s*"(functionCall)"\\s*:\\s*\\{\\s*"name"\\s*:\\s*"([^"]+)"\\s*,\\s*"args"\\s*:\\s*(\\{[\\s\\S]+?\\})\\s*\\}(?:\\s*,\\s*"thoughtSignature"\\s*:\\s*"[^"]*")?\\s*,\\s*"service"\\s*:\\s*"([^"]+)"\\s*\\}$',
     type: "markdown",
     markdown: "<br />*Tool use requested: $2*",
     actionType: "tool",
@@ -1236,9 +1238,12 @@ const ChatPanel: React.FC<ChatPanelProps & ExtraProps> = ({
 
       console.log("[BUTTON DEBUG] Starting action processing:", {
         actionsCount: allActions?.length || 0,
-        nonToolActions: allActions?.filter((a) => a.type !== "response" && a.actionType !== "tool").length || 0,
+        nonToolActions:
+          allActions?.filter(
+            (a) => a.type !== "response" && a.actionType !== "tool"
+          ).length || 0,
         cleanedTextLength: cleanedText.length,
-        messagesLength: messages.length
+        messagesLength: messages.length,
       });
 
       if (allActions && allActions.length > 0) {
@@ -1259,11 +1264,11 @@ const ChatPanel: React.FC<ChatPanelProps & ExtraProps> = ({
                 }>
               ${action.markdown ?? match}
             </button>`;
-                
+
                 console.log("[BUTTON DEBUG] Generated button HTML:", {
                   buttonId,
                   html: html.substring(0, 200) + "...",
-                  actionType: action.type
+                  actionType: action.type,
                 });
               } else if (action.type === "markdown" || action.type === "html") {
                 html = action.markdown ?? "";
@@ -1282,7 +1287,7 @@ const ChatPanel: React.FC<ChatPanelProps & ExtraProps> = ({
                 buttonId,
                 action,
                 match,
-                groups
+                groups,
               };
 
               // Add debug logging for button creation
@@ -1293,11 +1298,11 @@ const ChatPanel: React.FC<ChatPanelProps & ExtraProps> = ({
                 hasCallback: !!action.callback,
                 hasClickCode: !!action.clickCode,
                 match,
-                groups
+                groups,
               });
 
               // Add this to state to track pending button attachments
-              setPendingButtonAttachments(prev => [...prev, buttonContext]);
+              setPendingButtonAttachments((prev) => [...prev, buttonContext]);
 
               return html;
             });
@@ -1334,7 +1339,7 @@ const ChatPanel: React.FC<ChatPanelProps & ExtraProps> = ({
           contentLength: newResponse.length,
           contentPreview: newResponse.substring(0, 300) + "...",
           hasButtonTags: newResponse.includes("<button"),
-          buttonMatches: (newResponse.match(/<button[^>]*>/g) || []).length
+          buttonMatches: (newResponse.match(/<button[^>]*>/g) || []).length,
         });
 
         return updatedHistory;
@@ -1357,12 +1362,12 @@ const ChatPanel: React.FC<ChatPanelProps & ExtraProps> = ({
     if (pendingButtonAttachments.length > 0) {
       console.log("[BUTTON DEBUG] Starting button attachment process:", {
         pendingCount: pendingButtonAttachments.length,
-        pendingButtons: pendingButtonAttachments.map(b => ({
+        pendingButtons: pendingButtonAttachments.map((b) => ({
           buttonId: b.buttonId,
           actionType: b.action.type,
           hasCallback: !!b.action.callback,
-          hasClickCode: !!b.action.clickCode
-        }))
+          hasClickCode: !!b.action.clickCode,
+        })),
       });
 
       // Use a longer delay to ensure DOM has been updated after React re-render
@@ -1372,76 +1377,97 @@ const ChatPanel: React.FC<ChatPanelProps & ExtraProps> = ({
         let alreadyAttachedCount = 0;
 
         // First, let's see what buttons actually exist in the DOM
-        const allButtonsInDOM = document.querySelectorAll('button');
-        const buttonIdsInDOM = Array.from(allButtonsInDOM).map(btn => btn.id).filter(id => id);
-        
+        const allButtonsInDOM = document.querySelectorAll("button");
+        const buttonIdsInDOM = Array.from(allButtonsInDOM)
+          .map((btn) => btn.id)
+          .filter((id) => id);
+
         console.log("[BUTTON DEBUG] DOM state before attachment:", {
           totalButtonsInDOM: allButtonsInDOM.length,
           buttonIdsInDOM,
-          pendingButtonIds: pendingButtonAttachments.map(b => b.buttonId),
+          pendingButtonIds: pendingButtonAttachments.map((b) => b.buttonId),
           documentReady: document.readyState,
-          bodyHTML: document.body.innerHTML.includes('<button') ? 'Contains buttons' : 'No buttons found'
+          bodyHTML: document.body.innerHTML.includes("<button")
+            ? "Contains buttons"
+            : "No buttons found",
         });
 
-        pendingButtonAttachments.forEach(({ buttonId, action, match, groups }) => {
-          const button = document.getElementById(buttonId);
-          
-          console.log("[BUTTON DEBUG] Processing button:", {
-            buttonId,
-            buttonExists: !!button,
-            hasExistingOnclick: button ? !!button.onclick : false,
-            actionType: action.type,
-            buttonInnerHTML: button ? button.innerHTML : 'N/A',
-            buttonParent: button ? button.parentElement?.tagName : 'N/A'
-          });
+        pendingButtonAttachments.forEach(
+          ({ buttonId, action, match, groups }) => {
+            const button = document.getElementById(buttonId);
 
-          if (button) {
-            if (!button.onclick) {
-              button.onclick = () => {
-                console.log("[BUTTON DEBUG] Button clicked:", {
-                  buttonId,
-                  actionType: action.type,
-                  hasCallback: !!action.callback,
-                  hasClickCode: !!action.clickCode,
-                  match,
-                  groups
-                });
+            console.log("[BUTTON DEBUG] Processing button:", {
+              buttonId,
+              buttonExists: !!button,
+              hasExistingOnclick: button ? !!button.onclick : false,
+              actionType: action.type,
+              buttonInnerHTML: button ? button.innerHTML : "N/A",
+              buttonParent: button ? button.parentElement?.tagName : "N/A",
+            });
 
-                if (action.callback) {
-                  console.log("[BUTTON DEBUG] Executing callback for:", buttonId);
-                  action.callback(match, groups);
-                }
+            if (button) {
+              if (!button.onclick) {
+                button.onclick = () => {
+                  console.log("[BUTTON DEBUG] Button clicked:", {
+                    buttonId,
+                    actionType: action.type,
+                    hasCallback: !!action.callback,
+                    hasClickCode: !!action.clickCode,
+                    match,
+                    groups,
+                  });
 
-                if (action.clickCode) {
-                  try {
-                    console.log("[BUTTON DEBUG] Executing clickCode for:", buttonId);
-                    const func = new Function("match", action.clickCode);
-                    func(match);
-                    interactionClicked(lastCallId, "action");
-                  } catch (error) {
-                    console.error("[BUTTON DEBUG] Error executing clickCode:", error);
+                  if (action.callback) {
+                    console.log(
+                      "[BUTTON DEBUG] Executing callback for:",
+                      buttonId
+                    );
+                    action.callback(match, groups);
                   }
-                }
-              };
-              attachedCount++;
-              console.log("[BUTTON DEBUG] Successfully attached click handler to:", buttonId);
+
+                  if (action.clickCode) {
+                    try {
+                      console.log(
+                        "[BUTTON DEBUG] Executing clickCode for:",
+                        buttonId
+                      );
+                      const func = new Function("match", action.clickCode);
+                      func(match);
+                      interactionClicked(lastCallId, "action");
+                    } catch (error) {
+                      console.error(
+                        "[BUTTON DEBUG] Error executing clickCode:",
+                        error
+                      );
+                    }
+                  }
+                };
+                attachedCount++;
+                console.log(
+                  "[BUTTON DEBUG] Successfully attached click handler to:",
+                  buttonId
+                );
+              } else {
+                alreadyAttachedCount++;
+                console.log(
+                  "[BUTTON DEBUG] Button already has click handler:",
+                  buttonId
+                );
+              }
             } else {
-              alreadyAttachedCount++;
-              console.log("[BUTTON DEBUG] Button already has click handler:", buttonId);
+              notFoundCount++;
+              console.log("[BUTTON DEBUG] Button not found in DOM:", buttonId);
             }
-          } else {
-            notFoundCount++;
-            console.log("[BUTTON DEBUG] Button not found in DOM:", buttonId);
           }
-        });
+        );
 
         console.log("[BUTTON DEBUG] Attachment summary:", {
           totalProcessed: pendingButtonAttachments.length,
           attached: attachedCount,
           notFound: notFoundCount,
-          alreadyAttached: alreadyAttachedCount
+          alreadyAttached: alreadyAttachedCount,
         });
-        
+
         // Clear the pending attachments
         setPendingButtonAttachments([]);
       }, 100); // Increased timeout to 100ms
@@ -1453,20 +1479,20 @@ const ChatPanel: React.FC<ChatPanelProps & ExtraProps> = ({
 
   // Debug function to check DOM state - you can call this from browser console
   useEffect(() => {
-    if (typeof window !== 'undefined') {
+    if (typeof window !== "undefined") {
       (window as any).debugChatPanelButtons = () => {
         const allButtons = document.querySelectorAll('button[id^="button-"]');
-        const allButtonsAny = document.querySelectorAll('button');
-        const buttonInfo = Array.from(allButtons).map(button => ({
+        const allButtonsAny = document.querySelectorAll("button");
+        const buttonInfo = Array.from(allButtons).map((button) => ({
           id: button.id,
           hasOnclick: !!(button as HTMLButtonElement).onclick,
           textContent: button.textContent?.substring(0, 50),
           visible: (button as HTMLElement).offsetParent !== null,
           inDOM: document.contains(button),
           parentElement: button.parentElement?.tagName,
-          outerHTML: button.outerHTML.substring(0, 200)
+          outerHTML: button.outerHTML.substring(0, 200),
         }));
-        
+
         console.log("[BUTTON DEBUG] Current DOM button state:", {
           totalButtons: allButtonsAny.length,
           actionButtons: allButtons.length,
@@ -1474,20 +1500,21 @@ const ChatPanel: React.FC<ChatPanelProps & ExtraProps> = ({
           historyKeys: Object.keys(history),
           buttons: buttonInfo,
           documentReady: document.readyState,
-          bodyContainsButtons: document.body.innerHTML.includes('<button')
+          bodyContainsButtons: document.body.innerHTML.includes("<button"),
         });
-        
+
         // Also log the current history content
-        console.log("[BUTTON DEBUG] Current history content:", 
+        console.log(
+          "[BUTTON DEBUG] Current history content:",
           Object.entries(history).map(([key, entry]) => ({
             key,
             contentLength: entry.content?.length || 0,
-            hasButtons: entry.content?.includes('<button') || false,
+            hasButtons: entry.content?.includes("<button") || false,
             buttonCount: (entry.content?.match(/<button[^>]*>/g) || []).length,
-            contentPreview: entry.content?.substring(0, 300) + "..."
+            contentPreview: entry.content?.substring(0, 300) + "...",
           }))
         );
-        
+
         return buttonInfo;
       };
     }
