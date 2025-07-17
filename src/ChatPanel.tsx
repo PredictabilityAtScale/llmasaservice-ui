@@ -1470,7 +1470,7 @@ const ChatPanel: React.FC<ChatPanelProps & ExtraProps> = ({
 
         // Clear the pending attachments
         setPendingButtonAttachments([]);
-      }, 100); // Increased timeout to 100ms
+      }, 500);
 
       // Cleanup timeout if component unmounts or effect re-runs
       return () => clearTimeout(timeoutId);
