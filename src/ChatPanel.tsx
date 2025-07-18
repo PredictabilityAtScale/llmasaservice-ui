@@ -224,6 +224,9 @@ const ChatPanel: React.FC<ChatPanelProps & ExtraProps> = ({
     }>
   >([]);
 
+  // Persistent button action registry for event delegation fallback
+  const buttonActionRegistry = useRef<Map<string, { action: any; match: string; groups: any[] }>>(new Map());
+
   // load “always” approvals
   useEffect(() => {
     const stored = localStorage.getItem("alwaysApprovedTools");
@@ -243,6 +246,36 @@ const ChatPanel: React.FC<ChatPanelProps & ExtraProps> = ({
       setFollowOnQuestionsState(followOnQuestions);
     }
   }, [followOnQuestions]);
+
+  // Cleanup button registry on unmount
+  useEffect(() => {
+    return () => {
+      buttonActionRegistry.current.clear();
+      console.log("[BUTTON DEBUG] Cleaned up button registry on component unmount");
+    };
+  }, []);
+
+  // Periodic cleanup of orphaned registry entries
+  useEffect(() => {
+    const cleanupInterval = setInterval(() => {
+      const registryKeys = Array.from(buttonActionRegistry.current.keys());
+      const orphanedKeys: string[] = [];
+      
+      registryKeys.forEach(buttonId => {
+        const button = document.getElementById(buttonId);
+        if (!button) {
+          orphanedKeys.push(buttonId);
+          buttonActionRegistry.current.delete(buttonId);
+        }
+      });
+
+      if (orphanedKeys.length > 0) {
+        console.log("[BUTTON DEBUG] Cleaned up orphaned registry entries:", orphanedKeys);
+      }
+    }, 10000); // Cleanup every 10 seconds
+
+    return () => clearInterval(cleanupInterval);
+  }, []);
 
   const [iframeUrl, setIframeUrl] = useState<string | null>(null);
   const responseAreaRef = useRef(null);
@@ -1357,125 +1390,266 @@ const ChatPanel: React.FC<ChatPanelProps & ExtraProps> = ({
     processThinkingTags,
   ]);
 
+  // More reliable button attachment with retry mechanism and MutationObserver
+  const attachButtonHandlers = useCallback((
+    attachments: Array<{
+      buttonId: string;
+      action: any;
+      match: string;
+      groups: any[];
+    }>,
+    retryCount = 0
+  ) => {
+    if (attachments.length === 0) return;
+
+    console.log("[BUTTON DEBUG] Starting button attachment process:", {
+      pendingCount: attachments.length,
+      retryCount,
+      pendingButtons: attachments.map((b) => ({
+        buttonId: b.buttonId,
+        actionType: b.action.type,
+        hasCallback: !!b.action.callback,
+        hasClickCode: !!b.action.clickCode,
+      })),
+    });
+
+    let attachedCount = 0;
+    let notFoundCount = 0;
+    let alreadyAttachedCount = 0;
+    const stillPending: typeof attachments = [];
+
+    // First, let's see what buttons actually exist in the DOM
+    const allButtonsInDOM = document.querySelectorAll("button");
+    const buttonIdsInDOM = Array.from(allButtonsInDOM)
+      .map((btn) => btn.id)
+      .filter((id) => id);
+
+    console.log("[BUTTON DEBUG] DOM state before attachment:", {
+      totalButtonsInDOM: allButtonsInDOM.length,
+      buttonIdsInDOM,
+      pendingButtonIds: attachments.map((b) => b.buttonId),
+      documentReady: document.readyState,
+      retryCount,
+    });
+
+    attachments.forEach(({ buttonId, action, match, groups }) => {
+      const button = document.getElementById(buttonId) as HTMLButtonElement;
+
+      console.log("[BUTTON DEBUG] Processing button:", {
+        buttonId,
+        buttonExists: !!button,
+        hasExistingOnclick: button ? !!button.onclick : false,
+        actionType: action.type,
+        buttonInnerHTML: button ? button.innerHTML : "N/A",
+        buttonParent: button ? button.parentElement?.tagName : "N/A",
+        retryCount,
+      });
+
+      if (button) {
+        if (!button.onclick) {
+          button.onclick = () => {
+            console.log("[BUTTON DEBUG] Button clicked:", {
+              buttonId,
+              actionType: action.type,
+              hasCallback: !!action.callback,
+              hasClickCode: !!action.clickCode,
+              match,
+              groups,
+            });
+
+            if (action.callback) {
+              console.log(
+                "[BUTTON DEBUG] Executing callback for:",
+                buttonId
+              );
+              action.callback(match, groups);
+            }
+
+            if (action.clickCode) {
+              try {
+                console.log(
+                  "[BUTTON DEBUG] Executing clickCode for:",
+                  buttonId
+                );
+                const func = new Function("match", action.clickCode);
+                func(match);
+                // Note: interactionClicked will be available when this closure executes
+                if (typeof interactionClicked === 'function') {
+                  interactionClicked(lastCallId, "action");
+                }
+              } catch (error) {
+                console.error(
+                  "[BUTTON DEBUG] Error executing clickCode:",
+                  error
+                );
+              }
+            }
+          };
+          attachedCount++;
+          console.log(
+            "[BUTTON DEBUG] Successfully attached click handler to:",
+            buttonId
+          );
+        } else {
+          alreadyAttachedCount++;
+          console.log(
+            "[BUTTON DEBUG] Button already has click handler:",
+            buttonId
+          );
+        }
+      } else {
+        notFoundCount++;
+        stillPending.push({ buttonId, action, match, groups });
+        // Only register in fallback for buttons that failed direct attachment
+        buttonActionRegistry.current.set(buttonId, { action, match, groups });
+        console.log("[BUTTON DEBUG] Button not found in DOM, registered for fallback:", buttonId);
+      }
+    });
+
+    console.log("[BUTTON DEBUG] Attachment summary:", {
+      totalProcessed: attachments.length,
+      attached: attachedCount,
+      notFound: notFoundCount,
+      alreadyAttached: alreadyAttachedCount,
+      stillPending: stillPending.length,
+      retryCount,
+    });
+
+    // If there are still pending buttons and we haven't exceeded retry limit, try again
+    if (stillPending.length > 0 && retryCount < 5) {
+      console.log("[BUTTON DEBUG] Retrying button attachment in 200ms, attempt:", retryCount + 1);
+      setTimeout(() => {
+        attachButtonHandlers(stillPending, retryCount + 1);
+      }, 200);
+    } else if (stillPending.length > 0) {
+      console.warn("[BUTTON DEBUG] Failed to attach all buttons after max retries:", stillPending.map(p => p.buttonId));
+    }
+  }, [lastCallId]);
+
   // Handle button attachments after history updates
   useEffect(() => {
     if (pendingButtonAttachments.length > 0) {
-      console.log("[BUTTON DEBUG] Starting button attachment process:", {
-        pendingCount: pendingButtonAttachments.length,
-        pendingButtons: pendingButtonAttachments.map((b) => ({
-          buttonId: b.buttonId,
-          actionType: b.action.type,
-          hasCallback: !!b.action.callback,
-          hasClickCode: !!b.action.clickCode,
-        })),
+      // Use requestAnimationFrame to ensure DOM is ready, then add a small delay
+      requestAnimationFrame(() => {
+        setTimeout(() => {
+          attachButtonHandlers([...pendingButtonAttachments]);
+          setPendingButtonAttachments([]);
+        }, 100);
       });
+    }
+  }, [pendingButtonAttachments, attachButtonHandlers]);
 
-      // Use a longer delay to ensure DOM has been updated after React re-render
-      const timeoutId = setTimeout(() => {
-        let attachedCount = 0;
-        let notFoundCount = 0;
-        let alreadyAttachedCount = 0;
+  // Additional effect to catch buttons that might be added through other means
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
 
-        // First, let's see what buttons actually exist in the DOM
-        const allButtonsInDOM = document.querySelectorAll("button");
-        const buttonIdsInDOM = Array.from(allButtonsInDOM)
-          .map((btn) => btn.id)
-          .filter((id) => id);
+    const observer = new MutationObserver((mutations) => {
+      let newButtonsFound = false;
+      
+      mutations.forEach((mutation) => {
+        if (mutation.type === 'childList') {
+          mutation.addedNodes.forEach((node) => {
+            if (node.nodeType === Node.ELEMENT_NODE) {
+              const element = node as Element;
+              
+              // Check if the added node is a button with an action ID or contains such buttons
+              const actionButtons = element.id?.startsWith('button-') 
+                ? [element as HTMLButtonElement]
+                : Array.from(element.querySelectorAll('button[id^="button-"]'));
 
-        console.log("[BUTTON DEBUG] DOM state before attachment:", {
-          totalButtonsInDOM: allButtonsInDOM.length,
-          buttonIdsInDOM,
-          pendingButtonIds: pendingButtonAttachments.map((b) => b.buttonId),
-          documentReady: document.readyState,
-          bodyHTML: document.body.innerHTML.includes("<button")
-            ? "Contains buttons"
-            : "No buttons found",
-        });
+              if (actionButtons.length > 0) {
+                newButtonsFound = true;
+                console.log('[BUTTON DEBUG] MutationObserver detected new action buttons:', 
+                  actionButtons.map(btn => btn.id));
+                
+                // Check if any of these buttons don't have click handlers
+                actionButtons.forEach((button) => {
+                  if (!(button as HTMLButtonElement).onclick) {
+                    console.log('[BUTTON DEBUG] Found unattached button via MutationObserver:', button.id);
+                    // Note: We can't directly attach here because we don't have the action context
+                    // This is mainly for debugging to see if buttons are being added after our attachment
+                  }
+                });
+              }
+            }
+          });
+        }
+      });
+    });
 
-        pendingButtonAttachments.forEach(
-          ({ buttonId, action, match, groups }) => {
-            const button = document.getElementById(buttonId);
+    // Start observing only the response area, not the entire document
+    const responseArea = responseAreaRef.current;
+    if (responseArea) {
+      observer.observe(responseArea, {
+        childList: true,
+        subtree: true
+      });
+    }
 
-            console.log("[BUTTON DEBUG] Processing button:", {
-              buttonId,
-              buttonExists: !!button,
-              hasExistingOnclick: button ? !!button.onclick : false,
+    return () => observer.disconnect();
+  }, []);
+
+  // Fallback event delegation system for button clicks
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+
+    const handleDelegatedClick = (event: Event) => {
+      const target = event.target as HTMLElement;
+      
+      // Check if the clicked element is a button with an action ID
+      if (target.tagName === 'BUTTON' && target.id && target.id.startsWith('button-')) {
+        const buttonData = buttonActionRegistry.current.get(target.id);
+        
+        if (buttonData) {
+          const { action, match, groups } = buttonData;
+          
+          // Only handle if the button doesn't already have an onclick handler
+          const button = target as HTMLButtonElement;
+          if (!button.onclick) {
+            console.log("[BUTTON DEBUG] Fallback event delegation handling click:", {
+              buttonId: target.id,
               actionType: action.type,
-              buttonInnerHTML: button ? button.innerHTML : "N/A",
-              buttonParent: button ? button.parentElement?.tagName : "N/A",
+              hasCallback: !!action.callback,
+              hasClickCode: !!action.clickCode,
             });
 
-            if (button) {
-              if (!button.onclick) {
-                button.onclick = () => {
-                  console.log("[BUTTON DEBUG] Button clicked:", {
-                    buttonId,
-                    actionType: action.type,
-                    hasCallback: !!action.callback,
-                    hasClickCode: !!action.clickCode,
-                    match,
-                    groups,
-                  });
+            // Prevent default and stop propagation to avoid conflicts
+            event.preventDefault();
+            event.stopPropagation();
 
-                  if (action.callback) {
-                    console.log(
-                      "[BUTTON DEBUG] Executing callback for:",
-                      buttonId
-                    );
-                    action.callback(match, groups);
-                  }
-
-                  if (action.clickCode) {
-                    try {
-                      console.log(
-                        "[BUTTON DEBUG] Executing clickCode for:",
-                        buttonId
-                      );
-                      const func = new Function("match", action.clickCode);
-                      func(match);
-                      interactionClicked(lastCallId, "action");
-                    } catch (error) {
-                      console.error(
-                        "[BUTTON DEBUG] Error executing clickCode:",
-                        error
-                      );
-                    }
-                  }
-                };
-                attachedCount++;
-                console.log(
-                  "[BUTTON DEBUG] Successfully attached click handler to:",
-                  buttonId
-                );
-              } else {
-                alreadyAttachedCount++;
-                console.log(
-                  "[BUTTON DEBUG] Button already has click handler:",
-                  buttonId
-                );
-              }
-            } else {
-              notFoundCount++;
-              console.log("[BUTTON DEBUG] Button not found in DOM:", buttonId);
+            if (action.callback) {
+              console.log("[BUTTON DEBUG] Executing callback via delegation for:", target.id);
+              action.callback(match, groups);
             }
+
+            if (action.clickCode) {
+              try {
+                console.log("[BUTTON DEBUG] Executing clickCode via delegation for:", target.id);
+                const func = new Function("match", action.clickCode);
+                func(match);
+                if (typeof interactionClicked === 'function') {
+                  interactionClicked(lastCallId, "action");
+                }
+              } catch (error) {
+                console.error("[BUTTON DEBUG] Error executing clickCode via delegation:", error);
+              }
+            }
+
+            // Remove from registry after successful execution to prevent memory leaks
+            buttonActionRegistry.current.delete(target.id);
+            console.log("[BUTTON DEBUG] Removed button from registry after execution:", target.id);
           }
-        );
+        }
+      }
+    };
 
-        console.log("[BUTTON DEBUG] Attachment summary:", {
-          totalProcessed: pendingButtonAttachments.length,
-          attached: attachedCount,
-          notFound: notFoundCount,
-          alreadyAttached: alreadyAttachedCount,
-        });
+    // Add the delegated event listener to the document (using bubble phase instead of capture)
+    document.addEventListener('click', handleDelegatedClick, false);
 
-        // Clear the pending attachments
-        setPendingButtonAttachments([]);
-      }, 500);
-
-      // Cleanup timeout if component unmounts or effect re-runs
-      return () => clearTimeout(timeoutId);
-    }
-  }, [history, pendingButtonAttachments, lastCallId]); // Trigger after history updates
+    return () => {
+      document.removeEventListener('click', handleDelegatedClick, false);
+    };
+  }, [lastCallId]);
 
   // Debug function to check DOM state - you can call this from browser console
   useEffect(() => {
@@ -1491,16 +1665,22 @@ const ChatPanel: React.FC<ChatPanelProps & ExtraProps> = ({
           inDOM: document.contains(button),
           parentElement: button.parentElement?.tagName,
           outerHTML: button.outerHTML.substring(0, 200),
+          inRegistry: buttonActionRegistry.current.has(button.id),
         }));
 
         console.log("[BUTTON DEBUG] Current DOM button state:", {
           totalButtons: allButtonsAny.length,
           actionButtons: allButtons.length,
           pendingAttachments: pendingButtonAttachments.length,
+          registeredActions: buttonActionRegistry.current.size,
           historyKeys: Object.keys(history),
           buttons: buttonInfo,
           documentReady: document.readyState,
           bodyContainsButtons: document.body.innerHTML.includes("<button"),
+          registryKeys: Array.from(buttonActionRegistry.current.keys()),
+          orphanedInRegistry: Array.from(buttonActionRegistry.current.keys()).filter(
+            id => !document.getElementById(id)
+          ),
         });
 
         // Also log the current history content
@@ -1560,6 +1740,10 @@ const ChatPanel: React.FC<ChatPanelProps & ExtraProps> = ({
           setLastKey(initialPrompt);
           setLastController(controller);
           setHistory({});
+          
+          // Clear button registry for new conversation
+          buttonActionRegistry.current.clear();
+          console.log("[BUTTON DEBUG] Cleared button registry for new conversation");
         });
       }
     }
