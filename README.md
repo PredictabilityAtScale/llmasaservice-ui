@@ -7,6 +7,7 @@ This library offers a pre-built panel for incorporating chat GPT style features 
 Features
 - Multi-turn style chat interface
 - Open with an initial prompt (for example, after a click on a Summarize button in your application, set the initialPrompt to "Summarize the following text ..." and the panel will automatically show the summary)
+- New Conversation button to reset chat history while preserving customer information
 - Light and dark theme
 - Abort functionality
 - Markdown response display
@@ -144,6 +145,13 @@ c) use prose as the class for the markdownStyle. This example is for dark mode
 
 ## Customization
 You can customize the chat panel by passing props to the ChatPanel component. Refer to the library documentation for more details on available props and customization options.
+
+### Button Controls
+- `showSaveButton`: Show/hide the save conversation button (default: true)
+- `showEmailButton`: Show/hide the email conversation button (default: true)  
+- `showNewConversationButton`: Show/hide the new conversation button (default: true)
+
+The New Conversation button resets the chat history and state while preserving customer email and identification information. It requires two clicks for confirmation to prevent accidental resets - the first click changes the button to "Click to Confirm" and the second click performs the reset.
 
 See our storybook documentation showing how to theme, size and use the variaous features in this component:
 

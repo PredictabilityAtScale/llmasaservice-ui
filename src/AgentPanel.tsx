@@ -132,6 +132,12 @@ const AgentPanel: React.FC<AgentPanelProps & ExtraProps> = ({
       customerData.customer_user_email = finalCustomerEmail;
     }
 
+    // Get customer_user_name from props or URL
+    const finalCustomerUserName = customer?.customer_user_name || customer_name;
+    if (finalCustomerUserName) {
+      customerData.customer_user_name = finalCustomerUserName;
+    }
+
     // Get customer_name from props or URL
     const finalCustomerName = customer?.customer_name || customer_name;
     if (finalCustomerName) {

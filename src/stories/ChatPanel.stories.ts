@@ -29,6 +29,34 @@ export const ChatPanelStory: Story = {
   },
 };
 
+export const ChatPanelWithNewConversationButton: Story = {
+  args: {
+    title: "Chat Panel with New Conversation Button",
+    project_id: "[get this from your control panel]",
+    initialPrompt: "Hello! How can I help you today?",
+    hideInitialPrompt: false,
+    placeholder: "Type your message here...",
+    theme: "light",
+    messages: [
+      { role: "assistant", content: "Welcome! This conversation has some history." },
+      { role: "user", content: "Tell me about the weather" },
+      { role: "assistant", content: "I'd be happy to help with weather information. However, I don't have access to real-time weather data. You might want to check a weather service like Weather.com or use a weather app on your device." }
+    ],
+    width: "400px",
+    height: "600px",
+    showNewConversationButton: true,
+    showSaveButton: true,
+    showEmailButton: true,
+    initialMessage: "Try clicking the 'New Conversation' button - it requires two clicks to confirm the reset and prevent accidental conversation clearing!",
+    initialHistory: {
+      "Hello! How can I help you today?": {
+        content: "Welcome! This is a test conversation with some existing history. The 'New Conversation' button now requires double-click confirmation to prevent accidental resets.",
+        callId: "test-call-1"
+      }
+    }
+  },
+};
+
 export const ChatPanelThumbsStory: Story = {
   args: {
     title: "Chat",

@@ -412,6 +412,38 @@
   color: var(--button-text-color-hover);
 }
 
+/* New Conversation Button - distinct styling */
+.llm-panel .new-conversation-button {
+  background-color: var(--prompt-background-color);
+  border-color: var(--button-border-color);
+  font-weight: 500;
+}
+
+.llm-panel .new-conversation-button:hover {
+  background-color: var(--button-background-color-hover);
+  color: var(--button-text-color-hover);
+  transform: translateY(-1px);
+}
+
+/* Confirmation state styling */
+.llm-panel .new-conversation-button.confirm-state {
+  background-color: #ff6b35;
+  color: white;
+  border-color: #e55a2b;
+  animation: pulse-confirm 1s infinite;
+}
+
+.llm-panel .new-conversation-button.confirm-state:hover {
+  background-color: #e55a2b;
+  color: white;
+}
+
+@keyframes pulse-confirm {
+  0% { opacity: 1; }
+  50% { opacity: 0.7; }
+  100% { opacity: 1; }
+}
+
 /* Suggestion Buttons */
 .llm-panel .suggestion-button {
   background-color: var(--button-background-color);
