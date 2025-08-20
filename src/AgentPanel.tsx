@@ -223,7 +223,9 @@ const AgentPanel: React.FC<AgentPanelProps & ExtraProps> = ({
       {agentData && (
         <ChatPanel
           project_id={agentData?.projectId}
-          service={agentData?.groupId || null}
+          service={
+            service && service !== "" ? service : agentData?.groupId || null
+          }
           url={url}
           title={agentData?.displayTitle ?? ""}
           theme={

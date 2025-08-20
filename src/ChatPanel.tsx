@@ -153,6 +153,7 @@ const ChatPanel: React.FC<ChatPanelProps & ExtraProps> = ({
   const [hasScroll, setHasScroll] = useState(false);
   const bottomRef = useRef<HTMLDivElement | null>(null);
   const bottomPanelRef = useRef<HTMLDivElement | null>(null);
+  const textareaRef = useRef<HTMLTextAreaElement | null>(null);
   const [isAtBottom, setIsAtBottom] = useState(true);
   const [isEmailModalOpen, setIsEmailModalOpen] = useState(false);
   const [isToolInfoModalOpen, setIsToolInfoModalOpen] = useState(false);
@@ -257,9 +258,6 @@ const ChatPanel: React.FC<ChatPanelProps & ExtraProps> = ({
   useEffect(() => {
     return () => {
       buttonActionRegistry.current.clear();
-      console.log(
-        "[BUTTON DEBUG] Cleaned up button registry on component unmount"
-      );
     };
   }, []);
 
@@ -278,10 +276,6 @@ const ChatPanel: React.FC<ChatPanelProps & ExtraProps> = ({
       });
 
       if (orphanedKeys.length > 0) {
-        console.log(
-          "[BUTTON DEBUG] Cleaned up orphaned registry entries:",
-          orphanedKeys
-        );
       }
     }, 10000); // Cleanup every 10 seconds
 
@@ -617,7 +611,7 @@ const ChatPanel: React.FC<ChatPanelProps & ExtraProps> = ({
           const urlToFetch = `${publicAPIUrl}/tools/${encodeURIComponent(
             m.url
           )}`;
-          console.log(`Fetching tools from: ${urlToFetch}`);
+
           try {
             const response = await fetch(urlToFetch);
             if (!response.ok) {
@@ -687,18 +681,6 @@ const ChatPanel: React.FC<ChatPanelProps & ExtraProps> = ({
       };
     }) as [],
   });
-
-  // Add logging for streaming states
-  useEffect(() => {
-    console.log("Streaming state changed:", {
-      isLoading,
-      idle,
-      responseLength: response?.length || 0,
-      lastCallId,
-      hasResponse: !!response,
-      timestamp: new Date().toISOString(),
-    });
-  }, [isLoading, idle, response, lastCallId]);
 
   useEffect(() => {
     setShowEmailPanel(customerEmailCaptureMode !== "HIDE");
@@ -1137,7 +1119,6 @@ const ChatPanel: React.FC<ChatPanelProps & ExtraProps> = ({
             return null; // Exit if JSON parsing failed
           }
 
-          //console.log("tool result data", resultData);
           if (
             resultData &&
             resultData.content &&
@@ -1195,8 +1176,6 @@ const ChatPanel: React.FC<ChatPanelProps & ExtraProps> = ({
         }
       });
 
-      //console.log("Sending final messages with all tool results:", newMessages);
-
       send(
         "",
         newMessages as any,
@@ -1221,15 +1200,6 @@ const ChatPanel: React.FC<ChatPanelProps & ExtraProps> = ({
 
   useEffect(() => {
     if (response && response.length > 0) {
-      console.log("Response updated:", {
-        length: response.length,
-        isLoading,
-        idle,
-        hasReasoningTags: response.includes("<reasoning>"),
-        hasSearchingTags: response.includes("<searching>"),
-        preview: response.substring(0, 200) + "...",
-      });
-
       setIsLoading(false);
 
       // Step 1: Detect tool requests from the original response BEFORE any cleaning
@@ -1284,16 +1254,6 @@ const ChatPanel: React.FC<ChatPanelProps & ExtraProps> = ({
       // Step 4: Process other non-tool actions on the cleaned response
       let newResponse = cleanedText;
 
-      console.log("[BUTTON DEBUG] Starting action processing:", {
-        actionsCount: allActions?.length || 0,
-        nonToolActions:
-          allActions?.filter(
-            (a) => a.type !== "response" && a.actionType !== "tool"
-          ).length || 0,
-        cleanedTextLength: cleanedText.length,
-        messagesLength: messages.length,
-      });
-
       if (allActions && allActions.length > 0) {
         allActions
           .filter((a) => a.type !== "response" && a.actionType !== "tool")
@@ -1312,12 +1272,6 @@ const ChatPanel: React.FC<ChatPanelProps & ExtraProps> = ({
                 }>
               ${action.markdown ?? match}
             </button>`;
-
-                console.log("[BUTTON DEBUG] Generated button HTML:", {
-                  buttonId,
-                  html: html.substring(0, 200) + "...",
-                  actionType: action.type,
-                });
               } else if (action.type === "markdown" || action.type === "html") {
                 html = action.markdown ?? "";
               }
@@ -1338,17 +1292,6 @@ const ChatPanel: React.FC<ChatPanelProps & ExtraProps> = ({
                 groups,
               };
 
-              // Add debug logging for button creation
-              console.log("[BUTTON DEBUG] Button created:", {
-                buttonId,
-                actionType: action.type,
-                actionPattern: action.pattern,
-                hasCallback: !!action.callback,
-                hasClickCode: !!action.clickCode,
-                match,
-                groups,
-              });
-
               // Add this to state to track pending button attachments
               setPendingButtonAttachments((prev) => [...prev, buttonContext]);
 
@@ -1358,14 +1301,6 @@ const ChatPanel: React.FC<ChatPanelProps & ExtraProps> = ({
       }
 
       // Store the cleaned response (without reasoning/searching tags and without tool JSON)
-      console.log("Storing cleaned response to history:", {
-        originalLength: response.length,
-        cleanedLength: newResponse.length,
-        hasReasoningTags: response.includes("<reasoning>"),
-        hasSearchingTags: response.includes("<searching>"),
-        preview: newResponse.substring(0, 200) + "...",
-      });
-
       setHistory((prevHistory) => {
         // Get any existing tool data from the previous state
         const existingEntry = prevHistory[lastKey ?? ""] || {
@@ -1381,14 +1316,6 @@ const ChatPanel: React.FC<ChatPanelProps & ExtraProps> = ({
             callId: lastCallId,
           },
         };
-
-        console.log("[BUTTON DEBUG] History updated with content:", {
-          key: lastKey,
-          contentLength: newResponse.length,
-          contentPreview: newResponse.substring(0, 300) + "...",
-          hasButtonTags: newResponse.includes("<button"),
-          buttonMatches: (newResponse.match(/<button[^>]*>/g) || []).length,
-        });
 
         return updatedHistory;
       });
@@ -1417,18 +1344,6 @@ const ChatPanel: React.FC<ChatPanelProps & ExtraProps> = ({
       retryCount = 0
     ) => {
       if (attachments.length === 0) return;
-
-      console.log("[BUTTON DEBUG] Starting button attachment process:", {
-        pendingCount: attachments.length,
-        retryCount,
-        pendingButtons: attachments.map((b) => ({
-          buttonId: b.buttonId,
-          actionType: b.action.type,
-          hasCallback: !!b.action.callback,
-          hasClickCode: !!b.action.clickCode,
-        })),
-      });
-
       let attachedCount = 0;
       let notFoundCount = 0;
       let alreadyAttachedCount = 0;
@@ -1440,50 +1355,18 @@ const ChatPanel: React.FC<ChatPanelProps & ExtraProps> = ({
         .map((btn) => btn.id)
         .filter((id) => id);
 
-      console.log("[BUTTON DEBUG] DOM state before attachment:", {
-        totalButtonsInDOM: allButtonsInDOM.length,
-        buttonIdsInDOM,
-        pendingButtonIds: attachments.map((b) => b.buttonId),
-        documentReady: document.readyState,
-        retryCount,
-      });
-
       attachments.forEach(({ buttonId, action, match, groups }) => {
         const button = document.getElementById(buttonId) as HTMLButtonElement;
-
-        console.log("[BUTTON DEBUG] Processing button:", {
-          buttonId,
-          buttonExists: !!button,
-          hasExistingOnclick: button ? !!button.onclick : false,
-          actionType: action.type,
-          buttonInnerHTML: button ? button.innerHTML : "N/A",
-          buttonParent: button ? button.parentElement?.tagName : "N/A",
-          retryCount,
-        });
 
         if (button) {
           if (!button.onclick) {
             button.onclick = () => {
-              console.log("[BUTTON DEBUG] Button clicked:", {
-                buttonId,
-                actionType: action.type,
-                hasCallback: !!action.callback,
-                hasClickCode: !!action.clickCode,
-                match,
-                groups,
-              });
-
               if (action.callback) {
-                console.log("[BUTTON DEBUG] Executing callback for:", buttonId);
                 action.callback(match, groups);
               }
 
               if (action.clickCode) {
                 try {
-                  console.log(
-                    "[BUTTON DEBUG] Executing clickCode for:",
-                    buttonId
-                  );
                   const func = new Function("match", action.clickCode);
                   func(match);
                   // Note: interactionClicked will be available when this closure executes
@@ -1491,58 +1374,30 @@ const ChatPanel: React.FC<ChatPanelProps & ExtraProps> = ({
                     interactionClicked(lastCallId, "action");
                   }
                 } catch (error) {
-                  console.error(
-                    "[BUTTON DEBUG] Error executing clickCode:",
-                    error
-                  );
+                  console.error("Error executing clickCode:", error);
                 }
               }
             };
             attachedCount++;
-            console.log(
-              "[BUTTON DEBUG] Successfully attached click handler to:",
-              buttonId
-            );
           } else {
             alreadyAttachedCount++;
-            console.log(
-              "[BUTTON DEBUG] Button already has click handler:",
-              buttonId
-            );
           }
         } else {
           notFoundCount++;
           stillPending.push({ buttonId, action, match, groups });
           // Only register in fallback for buttons that failed direct attachment
           buttonActionRegistry.current.set(buttonId, { action, match, groups });
-          console.log(
-            "[BUTTON DEBUG] Button not found in DOM, registered for fallback:",
-            buttonId
-          );
         }
-      });
-
-      console.log("[BUTTON DEBUG] Attachment summary:", {
-        totalProcessed: attachments.length,
-        attached: attachedCount,
-        notFound: notFoundCount,
-        alreadyAttached: alreadyAttachedCount,
-        stillPending: stillPending.length,
-        retryCount,
       });
 
       // If there are still pending buttons and we haven't exceeded retry limit, try again
       if (stillPending.length > 0 && retryCount < 5) {
-        console.log(
-          "[BUTTON DEBUG] Retrying button attachment in 200ms, attempt:",
-          retryCount + 1
-        );
         setTimeout(() => {
           attachButtonHandlers(stillPending, retryCount + 1);
         }, 200);
       } else if (stillPending.length > 0) {
         console.warn(
-          "[BUTTON DEBUG] Failed to attach all buttons after max retries:",
+          "Failed to attach all buttons after max retries:",
           stillPending.map((p) => p.buttonId)
         );
       }
@@ -1583,16 +1438,12 @@ const ChatPanel: React.FC<ChatPanelProps & ExtraProps> = ({
 
               if (actionButtons.length > 0) {
                 newButtonsFound = true;
-                console.log(
-                  "[BUTTON DEBUG] MutationObserver detected new action buttons:",
-                  actionButtons.map((btn) => btn.id)
-                );
 
                 // Check if any of these buttons don't have click handlers
                 actionButtons.forEach((button) => {
                   if (!(button as HTMLButtonElement).onclick) {
                     console.log(
-                      "[BUTTON DEBUG] Found unattached button via MutationObserver:",
+                      "Found unattached button via MutationObserver:",
                       button.id
                     );
                     // Note: We can't directly attach here because we don't have the action context
@@ -1639,34 +1490,16 @@ const ChatPanel: React.FC<ChatPanelProps & ExtraProps> = ({
           // Only handle if the button doesn't already have an onclick handler
           const button = target as HTMLButtonElement;
           if (!button.onclick) {
-            console.log(
-              "[BUTTON DEBUG] Fallback event delegation handling click:",
-              {
-                buttonId: target.id,
-                actionType: action.type,
-                hasCallback: !!action.callback,
-                hasClickCode: !!action.clickCode,
-              }
-            );
-
             // Prevent default and stop propagation to avoid conflicts
             event.preventDefault();
             event.stopPropagation();
 
             if (action.callback) {
-              console.log(
-                "[BUTTON DEBUG] Executing callback via delegation for:",
-                target.id
-              );
               action.callback(match, groups);
             }
 
             if (action.clickCode) {
               try {
-                console.log(
-                  "[BUTTON DEBUG] Executing clickCode via delegation for:",
-                  target.id
-                );
                 const func = new Function("match", action.clickCode);
                 func(match);
                 if (typeof interactionClicked === "function") {
@@ -1674,7 +1507,7 @@ const ChatPanel: React.FC<ChatPanelProps & ExtraProps> = ({
                 }
               } catch (error) {
                 console.error(
-                  "[BUTTON DEBUG] Error executing clickCode via delegation:",
+                  "Error executing clickCode via delegation:",
                   error
                 );
               }
@@ -1682,10 +1515,6 @@ const ChatPanel: React.FC<ChatPanelProps & ExtraProps> = ({
 
             // Remove from registry after successful execution to prevent memory leaks
             buttonActionRegistry.current.delete(target.id);
-            console.log(
-              "[BUTTON DEBUG] Removed button from registry after execution:",
-              target.id
-            );
           }
         }
       }
@@ -1716,33 +1545,6 @@ const ChatPanel: React.FC<ChatPanelProps & ExtraProps> = ({
           inRegistry: buttonActionRegistry.current.has(button.id),
         }));
 
-        console.log("[BUTTON DEBUG] Current DOM button state:", {
-          totalButtons: allButtonsAny.length,
-          actionButtons: allButtons.length,
-          pendingAttachments: pendingButtonAttachments.length,
-          registeredActions: buttonActionRegistry.current.size,
-          historyKeys: Object.keys(history),
-          buttons: buttonInfo,
-          documentReady: document.readyState,
-          bodyContainsButtons: document.body.innerHTML.includes("<button"),
-          registryKeys: Array.from(buttonActionRegistry.current.keys()),
-          orphanedInRegistry: Array.from(
-            buttonActionRegistry.current.keys()
-          ).filter((id) => !document.getElementById(id)),
-        });
-
-        // Also log the current history content
-        console.log(
-          "[BUTTON DEBUG] Current history content:",
-          Object.entries(history).map(([key, entry]) => ({
-            key,
-            contentLength: entry.content?.length || 0,
-            hasButtons: entry.content?.includes("<button") || false,
-            buttonCount: (entry.content?.match(/<button[^>]*>/g) || []).length,
-            contentPreview: entry.content?.substring(0, 300) + "...",
-          }))
-        );
-
         return buttonInfo;
       };
     }
@@ -1751,6 +1553,28 @@ const ChatPanel: React.FC<ChatPanelProps & ExtraProps> = ({
   function hasVerticalScrollbar(element: any) {
     return element.scrollHeight > element.clientHeight;
   }
+
+  // Auto-resize textarea based on content
+  const autoResizeTextarea = useCallback(() => {
+    if (textareaRef.current) {
+      const textarea = textareaRef.current;
+      // Reset height to auto to get the actual scrollHeight
+      textarea.style.height = "auto";
+      // Set height to scrollHeight, but with min and max constraints
+      const minHeight = 40; // Minimum height in pixels
+      const maxHeight = 120; // Maximum height in pixels (about 4 lines)
+      const newHeight = Math.min(
+        Math.max(textarea.scrollHeight, minHeight),
+        maxHeight
+      );
+      textarea.style.height = `${newHeight}px`;
+    }
+  }, []);
+
+  // Auto-resize textarea when nextPrompt changes or component mounts
+  useEffect(() => {
+    autoResizeTextarea();
+  }, [nextPrompt, autoResizeTextarea]);
 
   // initial prompt change. Reset the chat history and get this response
   useEffect(() => {
@@ -1791,9 +1615,6 @@ const ChatPanel: React.FC<ChatPanelProps & ExtraProps> = ({
 
           // Clear button registry for new conversation
           buttonActionRegistry.current.clear();
-          console.log(
-            "[BUTTON DEBUG] Cleared button registry for new conversation"
-          );
         });
       }
     }
@@ -1835,7 +1656,7 @@ const ChatPanel: React.FC<ChatPanelProps & ExtraProps> = ({
   }, [history, historyChangedCallback]);
 
   useEffect(() => {
-    console.log("followOnPromptChanged", followOnPrompt);
+    console.log("followOnPromptChanged detected");
     if (followOnPrompt && followOnPrompt !== "") {
       continueChat(followOnPrompt);
     }
@@ -1986,7 +1807,7 @@ const ChatPanel: React.FC<ChatPanelProps & ExtraProps> = ({
   }, [currentCustomer, project_id, agent, publicAPIUrl, emailInput]);
 
   const continueChat = (suggestion?: string) => {
-    console.log("continueChat", suggestion);
+    console.log("continueChat called");
 
     // Clear thinking blocks for new response
     setThinkingBlocks([]);
@@ -2042,9 +1863,28 @@ const ChatPanel: React.FC<ChatPanelProps & ExtraProps> = ({
         setIsLoading(true);
 
         // build the chat input from history
-        const messagesAndHistory = messages;
+        // For new conversations (when history is empty), start with an empty array
+        // to prevent carrying over previous conversation context
+        const messagesAndHistory =
+          Object.keys(history).length === 0 ? [] : messages;
         Object.entries(history).forEach(([prompt, response]) => {
+          // Strip timestamp prefix from prompt before using it
           let promptToSend = prompt;
+          if (prompt.includes(":")) {
+            // Check if it starts with an ISO timestamp pattern
+            const isoTimestampRegex =
+              /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z:/;
+            if (isoTimestampRegex.test(prompt)) {
+              const colonIndex = prompt.indexOf(":", 19); // Skip the colons in the timestamp part
+              promptToSend = prompt.substring(colonIndex + 1);
+            }
+            // Also handle legacy numeric timestamps for backward compatibility
+            else if (/^\d+:/.test(prompt)) {
+              const colonIndex = prompt.indexOf(":");
+              promptToSend = prompt.substring(colonIndex + 1);
+            }
+          }
+
           if (promptTemplate && promptTemplate !== "") {
             promptToSend = promptTemplate.replace("{{prompt}}", promptToSend);
             for (let i = 0; i < data.length; i++) {
@@ -2064,20 +1904,10 @@ const ChatPanel: React.FC<ChatPanelProps & ExtraProps> = ({
 
         let nextPromptToSend = suggestion ?? nextPrompt;
 
-        let promptKey = nextPromptToSend ?? "";
-        let lastPromptKeyCharacter = promptKey[promptKey.length - 1] ?? "";
-
-        const count = Object.keys(history).filter((key) => {
-          return (
-            key.startsWith(promptKey) &&
-            promptKey.length > 0 &&
-            (key.endsWith(lastPromptKeyCharacter) || key.endsWith(")")) // the first or subsequent identical prompt beginnings
-          );
-        }).length;
-
-        if (count > 0) {
-          promptKey += ` (${count + 1})`;
-        }
+        // Generate a unique key using ISO timestamp prefix + prompt content
+        // This ensures chronological order and virtually guarantees uniqueness
+        const timestamp = new Date().toISOString();
+        let promptKey = `${timestamp}:${nextPromptToSend ?? ""}`;
 
         // set the history prompt with the about to be sent prompt
         setHistory((prevHistory) => {
@@ -2110,6 +1940,7 @@ const ChatPanel: React.FC<ChatPanelProps & ExtraProps> = ({
         }
 
         console.log("Sending for conversation", convId);
+
         const controller = new AbortController();
         send(
           nextPromptToSend,
@@ -2428,8 +2259,24 @@ const ChatPanel: React.FC<ChatPanelProps & ExtraProps> = ({
       return "";
     }
 
-    if (hideRagContextInPrompt && prompt.includes("CONTEXT:")) {
-      const parts = prompt.split("CONTEXT:");
+    // Strip timestamp prefix if present (format: "ISO_timestamp:prompt")
+    let cleanedPrompt = prompt;
+    if (prompt.includes(":")) {
+      // Check if it starts with an ISO timestamp pattern (YYYY-MM-DDTHH:mm:ss.sssZ)
+      const isoTimestampRegex = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z:/;
+      if (isoTimestampRegex.test(prompt)) {
+        const colonIndex = prompt.indexOf(":", 19); // Skip the colons in the timestamp part
+        cleanedPrompt = prompt.substring(colonIndex + 1);
+      }
+      // Also handle legacy numeric timestamps for backward compatibility
+      else if (/^\d+:/.test(prompt)) {
+        const colonIndex = prompt.indexOf(":");
+        cleanedPrompt = prompt.substring(colonIndex + 1);
+      }
+    }
+
+    if (hideRagContextInPrompt && cleanedPrompt.includes("CONTEXT:")) {
+      const parts = cleanedPrompt.split("CONTEXT:");
       const withoutContext = parts.length > 0 ? (parts[0] as string) : "";
 
       // Remove the optional chaining since withoutContext is always a string
@@ -2443,7 +2290,7 @@ const ChatPanel: React.FC<ChatPanelProps & ExtraProps> = ({
       return withoutContext.trim();
     }
 
-    return prompt;
+    return cleanedPrompt;
   };
 
   const isDisabledDueToNoEmail = () => {
@@ -3046,15 +2893,26 @@ const ChatPanel: React.FC<ChatPanelProps & ExtraProps> = ({
 
         <div className="input-container">
           <textarea
+            ref={textareaRef}
             className="chat-input"
             placeholder={placeholder}
             value={nextPrompt}
-            onChange={(e) => setNextPrompt(e.target.value)}
+            onChange={(e) => {
+              setNextPrompt(e.target.value);
+              // Auto-resize on content change
+              setTimeout(autoResizeTextarea, 0);
+            }}
             onKeyDown={(e) => {
               if (e.key === "Enter") {
-                if (nextPrompt !== "") {
-                  e.preventDefault();
-                  continueChat();
+                if (e.shiftKey) {
+                  // Shift+Enter: Allow new line (default behavior)
+                  return;
+                } else {
+                  // Enter alone: Send message
+                  if (nextPrompt.trim() !== "") {
+                    e.preventDefault();
+                    continueChat();
+                  }
                 }
               }
             }}
