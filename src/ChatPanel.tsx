@@ -6,18 +6,18 @@ import React, {
   useRef,
   useState,
 } from "react";
-import ReactMarkdown from "react-markdown";
 
 import ReactDOMServer from "react-dom/server";
 import "./ChatPanel.css";
 import remarkGfm from "remark-gfm";
 import rehypeRaw from "rehype-raw";
-import { Prism as SyntaxHighlighter } from "react-syntax-highlighter";
-import PrismStyle from "react-syntax-highlighter";
-import materialDark from "react-syntax-highlighter/dist/esm/styles/prism/material-dark.js";
-import materialLight from "react-syntax-highlighter/dist/esm/styles/prism/material-light.js";
 import EmailModal from "./EmailModal";
 import ToolInfoModal from "./ToolInfoModal";
+
+import { Streamdown } from "streamdown";
+import type { BundledTheme } from "shiki";
+import remarkMath from "remark-math";
+import remarkHtml from "remark-html";
 
 export interface ChatPanelProps {
   project_id: string;
@@ -38,7 +38,7 @@ export interface ChatPanelProps {
   height?: string;
   url?: string | null;
   scrollToEnd?: boolean;
-  prismStyle?: PrismStyle;
+  shikiTheme?: BundledTheme | [BundledTheme, BundledTheme];
   service?: string | null;
   historyChangedCallback?: (history: {
     [key: string]: { content: string; callId: string };
@@ -110,7 +110,7 @@ const ChatPanel: React.FC<ChatPanelProps & ExtraProps> = ({
   url = null,
   scrollToEnd = false,
   initialMessage = "",
-  prismStyle = theme === "light" ? materialLight : materialDark,
+  //prismStyle = theme === "light" ? materialLight : materialDark,
   service = null,
   historyChangedCallback = null,
   responseCompleteCallback = null,
@@ -135,6 +135,10 @@ const ChatPanel: React.FC<ChatPanelProps & ExtraProps> = ({
   customerEmailCaptureMode = "HIDE",
   customerEmailCapturePlaceholder = "Please enter your email...",
   mcpServers,
+  shikiTheme: shikiThemeProp = ["github-light", "github-dark"] as [
+    BundledTheme,
+    BundledTheme
+  ],
 }) => {
   const isEmailAddress = (email: string): boolean => {
     const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
@@ -416,7 +420,7 @@ const ChatPanel: React.FC<ChatPanelProps & ExtraProps> = ({
   );
 
   // Memoized render function for thinking blocks with navigation
-  const renderThinkingBlocks = useCallback((): JSX.Element | null => {
+  const renderThinkingBlocks = useCallback((): React.ReactElement | null => {
     if (thinkingBlocks.length === 0) return null;
 
     const currentBlock = thinkingBlocks[currentThinkingIndex];
@@ -1992,80 +1996,25 @@ const ChatPanel: React.FC<ChatPanelProps & ExtraProps> = ({
     }
   };
 
-  const CodeBlock = ({ node, className, children, style, ...props }: any) => {
-    const match = /language-(\w+)/.exec(className || "");
-
-    return match ? (
-      <>
-        <div
-          style={{
-            border: 0,
-            padding: 0,
-            height: "16px",
-            display: "flex",
-            justifyContent: "space-between",
-            alignItems: "center",
-          }}
-        >
-          <span>{match ? match[1] : "Unknown"}</span>
-          <button
-            onClick={() => copyToClipboard(children)}
-            className="copy-button"
-          >
-            <svg
-              xmlns="http://www.w3.org/2000/svg"
-              viewBox="0 0 320 320"
-              fill="currentColor"
-              className="icon-svg"
-            >
-              <path
-                d="M35,270h45v45c0,8.284,6.716,15,15,15h200c8.284,0,15-6.716,15-15V75c0-8.284-6.716-15-15-15h-45V15
-		c0-8.284-6.716-15-15-15H35c-8.284,0-15,6.716-15,15v240C20,263.284,26.716,270,35,270z M280,300H110V90h170V300z M50,30h170v30H95
-		c-8.284,0-15,6.716-15,15v165H50V30z"
-              />
-              <path d="M155,120c-8.284,0-15,6.716-15,15s6.716,15,15,15h80c8.284,0,15-6.716,15-15s-6.716-15-15-15H155z" />
-              <path d="M235,180h-80c-8.284,0-15,6.716-15,15s6.716,15,15,15h80c8.284,0,15-6.716,15-15S243.284,180,235,180z" />
-              <path
-                d="M235,240h-80c-8.284,0-15,6.716-15,15c0,8.284,6.716,15,15,15h80c8.284,0,15-6.716,15-15C250,246.716,243.284,240,235,240z
-		"
-              />
-            </svg>
-          </button>
-        </div>
-        <SyntaxHighlighter
-          style={prismStyle}
-          PreTag="div"
-          language={match[1]}
-          {...props}
-        >
-          {String(children).replace(/\n$/, "")}
-        </SyntaxHighlighter>
-      </>
-    ) : (
-      <code className={className ? className : ""} {...props}>
-        {children}
-      </code>
-    );
-  };
-
-  // links should always open in a new tab
-  const CustomLink = ({ href, children, ...props }: any) => {
-    return (
-      <a href={href} target="_blank" rel="noopener noreferrer" {...props}>
-        {children}
-      </a>
-    );
-  };
+  // Normalize shikiTheme so Streamdown always receives either undefined or a tuple.
+  const normalizedShikiTheme = useMemo<
+    [BundledTheme, BundledTheme] | undefined
+  >(() => {
+    if (!shikiThemeProp) return undefined;
+    return Array.isArray(shikiThemeProp)
+      ? shikiThemeProp
+      : [shikiThemeProp, shikiThemeProp];
+  }, [shikiThemeProp]);
 
   const convertMarkdownToHTML = (markdown: string): string => {
     const html = ReactDOMServer.renderToStaticMarkup(
-      <ReactMarkdown
-        className={markdownClass}
-        remarkPlugins={[remarkGfm]}
+      <Streamdown
+        shikiTheme={normalizedShikiTheme}
+        remarkPlugins={[remarkGfm, remarkMath, remarkHtml]}
         rehypePlugins={[rehypeRaw]}
       >
         {markdown}
-      </ReactMarkdown>
+      </Streamdown>
     );
     return html;
   };
@@ -2355,13 +2304,12 @@ const ChatPanel: React.FC<ChatPanelProps & ExtraProps> = ({
           {initialMessage && initialMessage !== "" ? (
             <div className="history-entry">
               <div className="response">
-                <ReactMarkdown
-                  className={markdownClass}
-                  remarkPlugins={[remarkGfm]}
+                <Streamdown
+                  remarkPlugins={[remarkGfm, remarkMath, remarkHtml]}
                   rehypePlugins={[rehypeRaw]}
                 >
                   {initialMessage}
-                </ReactMarkdown>
+                </Streamdown>
               </div>
             </div>
           ) : null}
@@ -2437,14 +2385,13 @@ const ChatPanel: React.FC<ChatPanelProps & ExtraProps> = ({
                           response || ""
                         );
                         return cleanedText && cleanedText.length > 0 ? (
-                          <ReactMarkdown
-                            className={markdownClass}
-                            remarkPlugins={[remarkGfm]}
+                          <Streamdown
+                            shikiTheme={normalizedShikiTheme}
+                            remarkPlugins={[remarkGfm, remarkMath, remarkHtml]}
                             rehypePlugins={[rehypeRaw]}
-                            components={{ /*a: CustomLink,*/ code: CodeBlock }}
                           >
                             {cleanedText}
-                          </ReactMarkdown>
+                          </Streamdown>
                         ) : null;
                       })()}
                     </div>
@@ -2456,14 +2403,13 @@ const ChatPanel: React.FC<ChatPanelProps & ExtraProps> = ({
                         renderThinkingBlocks()}
 
                       {/* Show the main content (cleaned of thinking tags) */}
-                      <ReactMarkdown
-                        className={markdownClass}
-                        remarkPlugins={[remarkGfm]}
+                      <Streamdown
+                        shikiTheme={normalizedShikiTheme}
+                        remarkPlugins={[remarkGfm, remarkMath, remarkHtml]}
                         rehypePlugins={[rehypeRaw]}
-                        components={{ /*a: CustomLink,*/ code: CodeBlock }}
                       >
                         {processThinkingTags(historyEntry.content).cleanedText}
-                      </ReactMarkdown>
+                      </Streamdown>
                     </div>
                   )}
 

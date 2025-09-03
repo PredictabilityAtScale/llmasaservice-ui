@@ -1,9 +1,7 @@
 import React, { useEffect, useState } from "react";
-import materialDark from "react-syntax-highlighter/dist/esm/styles/prism/material-dark.js";
-import materialLight from "react-syntax-highlighter/dist/esm/styles/prism/material-light.js";
 import ChatPanel from "./ChatPanel";
 import { LLMAsAServiceCustomer } from "llmasaservice-client";
-import PrismStyle from "react-syntax-highlighter";
+import type { BundledTheme } from "shiki";
 
 export interface AgentPanelProps {
   //project_id: string;
@@ -23,7 +21,8 @@ export interface AgentPanelProps {
   height?: string;
   url?: string;
   //scrollToEnd?: boolean;
-  prismStyle?: PrismStyle;
+  shikiTheme?: BundledTheme | [BundledTheme, BundledTheme];
+
   service?: string | null;
   historyChangedCallback?: (history: {
     [key: string]: { content: string; callId: string };
@@ -85,7 +84,7 @@ const AgentPanel: React.FC<AgentPanelProps & ExtraProps> = ({
   //url = "https://chat.llmasaservice.io/dev",
   //scrollToEnd = false,
   //initialMessage = "",
-  prismStyle = null,
+  shikiTheme = ["github-light", "github-dark"] as [BundledTheme, BundledTheme],
   service = null,
   historyChangedCallback = undefined,
   responseCompleteCallback = undefined,
@@ -107,6 +106,10 @@ const AgentPanel: React.FC<AgentPanelProps & ExtraProps> = ({
   //ragRankLimit = 5,
   initialHistory = {},
   hideRagContextInPrompt = true,
+  shikiTheme: shikiThemeProp = ["github-light", "github-dark"] as [
+    BundledTheme,
+    BundledTheme
+  ],
 }) => {
   const searchParams = new URLSearchParams(location.search);
   const customer_id = searchParams.get("customer_id") || null;
@@ -258,14 +261,7 @@ const AgentPanel: React.FC<AgentPanelProps & ExtraProps> = ({
           clearFollowOnQuestionsNextPrompt={clearFollowOnQuestionsNextPrompt}
           historyChangedCallback={historyChangedCallback}
           responseCompleteCallback={responseCompleteCallback}
-          prismStyle={
-            prismStyle ??
-            (theme
-              ? ((theme === "light" ? materialLight : materialDark) as any)
-              : ((agentData?.displayTheme === "light"
-                  ? materialLight
-                  : materialDark) as any))
-          }
+          shikiTheme={shikiThemeProp}
           actions={[
             ...actions,
             ...getActionsArraySafely(agentData?.displayActions),
