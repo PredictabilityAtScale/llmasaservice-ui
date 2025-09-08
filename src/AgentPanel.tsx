@@ -204,6 +204,10 @@ const AgentPanel: React.FC<AgentPanelProps & ExtraProps> = ({
   }, [agent, url]);
 
   const getActionsArraySafely = (actionsString: string) => {
+    console.log("AgentPanel getActionsArraySafely called with:", {
+      actionsString,
+      type: typeof actionsString
+    });
     let actions: any[] = [];
     if (actionsString && actionsString !== "") {
       try {
@@ -211,7 +215,9 @@ const AgentPanel: React.FC<AgentPanelProps & ExtraProps> = ({
         if (!Array.isArray(actions)) {
           throw new Error("Parsed actions is not an array");
         }
+        console.log("AgentPanel parsed actions:", actions);
       } catch (error) {
+        console.log("AgentPanel actions parsing error:", error);
         actions = [];
       }
     }
@@ -269,7 +275,10 @@ const AgentPanel: React.FC<AgentPanelProps & ExtraProps> = ({
           actions={[
             ...actions,
             ...getActionsArraySafely(agentData?.displayActions),
-          ]}
+          ].map((action, index) => {
+            console.log(`AgentPanel action ${index}:`, action);
+            return action;
+          })}
           followOnPrompt={followOnPrompt}
           agent={agent}
           placeholder={agentData?.displayPlaceholder ?? "Type a message"}

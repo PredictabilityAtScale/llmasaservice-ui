@@ -78,6 +78,7 @@ export interface ChatPanelProps {
   customerEmailCaptureMode?: "HIDE" | "OPTIONAL" | "REQUIRED";
   customerEmailCapturePlaceholder?: string;
   mcpServers?: [];
+  progressiveActions?: boolean;
 }
 
 interface HistoryEntry {
@@ -135,6 +136,7 @@ const ChatPanel: React.FC<ChatPanelProps & ExtraProps> = ({
   customerEmailCaptureMode = "HIDE",
   customerEmailCapturePlaceholder = "Please enter your email...",
   mcpServers,
+  progressiveActions = true,
 }) => {
   const isEmailAddress = (email: string): boolean => {
     const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
@@ -219,6 +221,9 @@ const ChatPanel: React.FC<ChatPanelProps & ExtraProps> = ({
   >([]);
   const [currentThinkingIndex, setCurrentThinkingIndex] = useState(0);
 
+  // State for tracking user-resized textarea height
+  const [userResizedHeight, setUserResizedHeight] = useState<number | null>(null);
+
   // State for pending button attachments
   const [pendingButtonAttachments, setPendingButtonAttachments] = useState<
     Array<{
@@ -228,6 +233,16 @@ const ChatPanel: React.FC<ChatPanelProps & ExtraProps> = ({
       groups: any[];
     }>
   >([]);
+
+  // Progressive actions support
+  const actionMatchRegistry = useRef<Map<string, string>>(new Map()); // key => stable buttonId
+  const deferredActionsRef = useRef<
+    Map<string, { action: any; match: string; groups: any[] }>
+  >(new Map()); // buttonId => metadata (filled during streaming)
+  const finalizedButtonsRef = useRef<Set<string>>(new Set()); // track activated buttonIds
+  const actionSequenceRef = useRef<number>(0); // incremental id source
+  const lastProcessedResponseRef = useRef<string>(""); // detect unchanged streaming chunks
+  const finalizedForCallRef = useRef<string | null>(null); // lastCallId for which finalization happened
 
   // Persistent button action registry for event delegation fallback
   const buttonActionRegistry = useRef<
@@ -416,7 +431,7 @@ const ChatPanel: React.FC<ChatPanelProps & ExtraProps> = ({
   );
 
   // Memoized render function for thinking blocks with navigation
-  const renderThinkingBlocks = useCallback((): JSX.Element | null => {
+  const renderThinkingBlocks = useCallback((): React.ReactElement | null => {
     if (thinkingBlocks.length === 0) return null;
 
     const currentBlock = thinkingBlocks[currentThinkingIndex];
@@ -592,7 +607,7 @@ const ChatPanel: React.FC<ChatPanelProps & ExtraProps> = ({
 
   // mcp servers are passed in in the mcpServers prop. Fetch tools for each one.
   useEffect(() => {
-    console.log("MCP servers", mcpServers);
+    //console.log("MCP servers", mcpServers);
 
     const fetchAndSetTools = async () => {
       if (!mcpServers || mcpServers.length === 0) {
@@ -649,7 +664,7 @@ const ChatPanel: React.FC<ChatPanelProps & ExtraProps> = ({
 
         const allTools = results.flat();
 
-        console.log("Merged tools from all servers:", allTools);
+        //console.log("Merged tools from all servers:", allTools);
         setToolList(allTools);
         setToolsFetchError(false);
       } catch (error) {
@@ -682,6 +697,195 @@ const ChatPanel: React.FC<ChatPanelProps & ExtraProps> = ({
     }) as [],
   });
 
+  // Centralized action processing function to eliminate duplication
+  const processActionsOnContent = useCallback((
+    content: string,
+    context: {
+      type: 'history' | 'streaming';
+      historyIndex?: number;
+      actionIndex?: number;
+      matchOffset?: number;
+      isProgressive?: boolean;
+      isIdle?: boolean;
+    }
+  ): {
+    processedContent: string;
+    buttonAttachments: Array<{
+      buttonId: string;
+      action: any;
+      match: string;
+      groups: any[];
+    }>;
+  } => {
+    let workingContent = content;
+    const buttonAttachments: Array<{
+      buttonId: string;
+      action: any;
+      match: string;
+      groups: any[];
+    }> = [];
+
+    // 1. Remove tool JSON patterns (display only)
+    allActions
+      .filter((a) => a.actionType === "tool")
+      .forEach((action) => {
+        try {
+          const regex = new RegExp(action.pattern, "gmi");
+          workingContent = workingContent.replace(regex, "");
+        } catch (e) {
+          console.warn("Invalid tool action regex", action.pattern, e);
+        }
+      });
+
+    // 2. Remove thinking tags (for history processing)
+    if (context.type === 'history') {
+      const { cleanedText } = processThinkingTags(workingContent);
+      workingContent = cleanedText;
+    }
+
+    // 3. Apply non-tool, non-response actions (markdown/html/button transformations)
+    const filteredActions = allActions.filter((a) => a.type !== "response" && a.actionType !== "tool");
+    console.log(`DEBUG: ${context.type} processing - filtered actions:`, filteredActions.length, 'of', allActions.length);
+    
+    filteredActions.forEach((action, actionIndex) => {
+        try {
+          const regex = new RegExp(action.pattern, "gmi");
+          const matches = workingContent.match(regex);
+          
+          if (matches) {
+            console.log(`${context.type === 'history' ? 'History' : 'Streaming'} processing: Found matches for pattern "${action.pattern}":`, matches, 'in content:', workingContent.substring(0, 100));
+          }
+          
+          workingContent = workingContent.replace(
+            regex,
+            (match: string, ...groups: any[]) => {
+              // The match parameter is the full match, groups are the capture groups
+              const actualMatch = match;
+              // Remove the last two elements (offset and full string) to get just capture groups
+              const restGroups = groups.slice(0, -2);
+              
+              // Generate buttonId based on context
+              let buttonId: string;
+              if (context.type === 'history') {
+                const matchIndex = restGroups[restGroups.length - 2];
+                buttonId = `button-init-${context.historyIndex}-${actionIndex}-${matchIndex}`;
+              } else {
+                // Streaming context
+                const offset = groups[groups.length - 2];
+                const matchOffset = typeof offset === "number" ? offset : 0;
+                const key = `${actionIndex}:${matchOffset}`;
+                
+                // Derive or allocate stable buttonId
+                let existingButtonId = actionMatchRegistry.current.get(key);
+                if (!existingButtonId) {
+                  existingButtonId = `button-stable-${actionSequenceRef.current++}`;
+                  actionMatchRegistry.current.set(key, existingButtonId);
+                }
+                buttonId = existingButtonId;
+
+                // If already finalized and progressive mode active, skip reinsertion
+                if (context.isProgressive && finalizedButtonsRef.current.has(buttonId)) {
+                  return match;
+                }
+              }
+
+              // Replace tokens in template
+              const substituteTemplate = (template: string) => {
+                let html = template.replace(/\$match/gim, actualMatch);
+                restGroups.forEach((g, gi) => {
+                  html = html.replace(new RegExp(`\\$${gi + 1}`, "gmi"), g || '');
+                });
+                return html;
+              };
+
+              // Build HTML output
+              let html = actualMatch;
+              if (action.type === "button" || action.type === "callback") {
+                // For history: always active buttons
+                // For streaming: placeholder (disabled) during streaming, active when idle
+                if (context.type === 'history') {
+                  html = `<br /><button id="${buttonId}" ${
+                    action.style ? 'class="' + action.style + '"' : ""
+                  }>${action.markdown ?? actualMatch}</button>`;
+                } else {
+                  // Streaming context with progressive actions
+                  if (context.isProgressive && !context.isIdle) {
+                    html = `<br /><button id="${buttonId}" data-pending="true" ${
+                      action.style ? 'class="' + action.style + '"' : ""
+                    }>${substituteTemplate(action.markdown ?? actualMatch)}</button>`;
+                  } else {
+                    html = `<br /><button id="${buttonId}" ${
+                      action.style ? 'class="' + action.style + '"' : ""
+                    }>${substituteTemplate(action.markdown ?? actualMatch)}</button>`;
+                  }
+                }
+              } else if (action.type === "markdown" || action.type === "html") {
+                html = context.type === 'history' 
+                  ? (action.markdown ?? "")
+                  : substituteTemplate(action.markdown ?? "");
+              }
+
+              // Apply token substitution for history context
+              if (context.type === 'history') {
+                html = html.replace(new RegExp("\\$match", "gmi"), actualMatch);
+                restGroups.forEach((group: string, gi: number) => {
+                  html = html.replace(
+                    new RegExp(`\\$${gi + 1}`, "gmi"),
+                    group || ''
+                  );
+                });
+              }
+
+              // Queue button attachment context if needed
+              if (action.type === "button" || action.type === "callback") {
+                if (context.type === 'history') {
+                  buttonAttachments.push({
+                    buttonId,
+                    action,
+                    match: actualMatch,
+                    groups: restGroups,
+                  });
+                  // Also add to registry for fallback event delegation
+                  buttonActionRegistry.current.set(buttonId, {
+                    action,
+                    match: actualMatch,
+                    groups: restGroups,
+                  });
+                } else {
+                  // Streaming context
+                  if (!finalizedButtonsRef.current.has(buttonId)) {
+                    deferredActionsRef.current.set(buttonId, {
+                      action,
+                      match: actualMatch,
+                      groups: restGroups,
+                    });
+                    // If NOT progressive (legacy behavior) attach immediately
+                    if (!context.isProgressive) {
+                      buttonAttachments.push({
+                        buttonId,
+                        action,
+                        match: actualMatch,
+                        groups: restGroups,
+                      });
+                    }
+                  }
+                }
+              }
+
+              return html;
+            }
+          );
+        } catch (e) {
+          console.warn("Invalid action regex", action.pattern, e);
+        }
+      });
+
+    return {
+      processedContent: workingContent,
+      buttonAttachments,
+    };
+  }, [allActions, processThinkingTags, progressiveActions, idle]);
+
   useEffect(() => {
     setShowEmailPanel(customerEmailCaptureMode !== "HIDE");
 
@@ -701,12 +905,14 @@ const ChatPanel: React.FC<ChatPanelProps & ExtraProps> = ({
           if (action.type === "response" && action.pattern) {
             const regex = new RegExp(action.pattern, "gi");
             const matches = regex.exec(response);
+            /*
             console.log(
               "action match",
               matches,
               action.pattern,
               action.callback
             );
+            */
             if (matches && action.callback) {
               action.callback(matches[0], matches.slice(1));
             }
@@ -724,6 +930,8 @@ const ChatPanel: React.FC<ChatPanelProps & ExtraProps> = ({
   useEffect(() => {
     if (Object.keys(initialHistory).length === 0) return;
     setHistory(initialHistory);
+    // Reset processed history keys when initialHistory changes to ensure reprocessing with actions
+    processedHistoryKeysRef.current.clear();
   }, [initialHistory]);
 
   useEffect(() => {
@@ -753,7 +961,7 @@ const ChatPanel: React.FC<ChatPanelProps & ExtraProps> = ({
         // Add a data attribute to identify and remove this link later if needed
         link.setAttribute("data-source", "llmasaservice-ui");
         document.head.appendChild(link);
-        console.log("Added CSS link", link);
+        //console.log("Added CSS link", link);
       } else {
         // If it's a CSS string, create a style element
         const style = document.createElement("style");
@@ -761,7 +969,7 @@ const ChatPanel: React.FC<ChatPanelProps & ExtraProps> = ({
         // Add a data attribute to identify and remove this style later if needed
         style.setAttribute("data-source", "llmasaservice-ui");
         document.head.appendChild(style);
-        console.log("Added inline CSS");
+        //console.log("Added inline CSS");
       }
     }
 
@@ -944,7 +1152,6 @@ const ChatPanel: React.FC<ChatPanelProps & ExtraProps> = ({
                   };
                 }
               } else {
-                console.warn("Invalid or missing callback in action:", action);
                 // Optionally provide a no-op fallback or skip the action:
                 return null;
               }
@@ -962,15 +1169,88 @@ const ChatPanel: React.FC<ChatPanelProps & ExtraProps> = ({
   };
 
   useEffect(() => {
+    // DEBUG: Log when actions prop changes
+    console.log("ChatPanel received actions prop change:", {
+      actions,
+      actionsType: typeof actions,
+      actionsLength: Array.isArray(actions) ? actions.length : "not array"
+    });
+    
     const actionsString =
       typeof actions === "string" ? actions : JSON.stringify(actions);
+    const processedActions = getActionsArraySafely(actionsString);
+    console.log("DEBUG: Setting allActions:", {
+      actionsString,
+      processedActions,
+      totalActions: [...processedActions, anthropic_toolAction, openAI_toolAction, google_toolAction].length
+    });
     setAllActions([
-      ...getActionsArraySafely(actionsString),
+      ...processedActions,
       anthropic_toolAction,
       openAI_toolAction,
       google_toolAction,
     ]);
   }, [actions]);
+
+  // Track which history prompts have been processed by actions formatting
+  const processedHistoryKeysRef = useRef<Set<string>>(new Set());
+
+  // Process existing (initial) history entries so they receive the same formatting
+  // as streamed responses (tool JSON removal, thinking tag removal, action markdown/button injection)
+  useEffect(() => {
+    if (!allActions || allActions.length === 0) return; // wait for actions
+    setHistory((prevHistory) => {
+      if (!prevHistory || Object.keys(prevHistory).length === 0)
+        return prevHistory;
+
+      let changed = false;
+      const updated: typeof prevHistory = { ...prevHistory };
+      const newButtonAttachments: Array<{
+        buttonId: string;
+        action: any;
+        match: string;
+        groups: any[];
+      }> = [];
+
+      Object.entries(prevHistory).forEach(([prompt, entry], historyIndex) => {
+        if (processedHistoryKeysRef.current.has(prompt)) return; // skip already processed
+
+        if (!entry || !entry.content) {
+          processedHistoryKeysRef.current.add(prompt);
+          return;
+        }
+
+        // Use centralized action processing function
+        const { processedContent, buttonAttachments } = processActionsOnContent(
+          entry.content,
+          {
+            type: 'history',
+            historyIndex,
+          }
+        );
+
+        if (processedContent !== entry.content) {
+          updated[prompt] = { ...entry, content: processedContent } as any;
+          changed = true;
+        }
+
+        // Add button attachments to the queue
+        newButtonAttachments.push(...buttonAttachments);
+        
+        processedHistoryKeysRef.current.add(prompt);
+      });
+
+      if (newButtonAttachments.length > 0) {
+        // Defer adding button attachments until after history state applied
+        setPendingButtonAttachments((prev) => [
+          ...prev,
+          ...newButtonAttachments,
+        ]);
+      }
+
+      return changed ? updated : prevHistory;
+    });
+  }, [allActions, processThinkingTags, initialHistory]);
 
   const pendingToolRequestsRef = useRef(pendingToolRequests);
 
@@ -986,7 +1266,7 @@ const ChatPanel: React.FC<ChatPanelProps & ExtraProps> = ({
 
     if (requests.length === 0) return;
 
-    console.log("processGivenToolRequests", requests);
+    //console.log("processGivenToolRequests", requests);
     setIsLoading(true);
 
     const toolsToProcess = [...requests];
@@ -1046,7 +1326,7 @@ const ChatPanel: React.FC<ChatPanelProps & ExtraProps> = ({
         if (!item || !item.req) return null;
 
         const req = item.req;
-        console.log(`Processing tool ${req.toolName}`);
+        //console.log(`Processing tool ${req.toolName}`);
 
         const mcpTool = toolList.find((tool) => tool.name === req.toolName);
 
@@ -1225,7 +1505,7 @@ const ChatPanel: React.FC<ChatPanelProps & ExtraProps> = ({
 
       // Set tool requests immediately after detection
       if (toolRequests.length > 0) {
-        console.log("toolRequests", toolRequests);
+        //console.log("toolRequests", toolRequests);
         setPendingToolRequests(toolRequests);
       } else {
         setPendingToolRequests([]);
@@ -1251,53 +1531,19 @@ const ChatPanel: React.FC<ChatPanelProps & ExtraProps> = ({
       // Always show the latest (last) thinking block
       setCurrentThinkingIndex(Math.max(0, newThinkingBlocks.length - 1));
 
-      // Step 4: Process other non-tool actions on the cleaned response
-      let newResponse = cleanedText;
+      // Step 4: Process other non-tool actions on the cleaned response with two-phase option
+      const { processedContent: newResponse, buttonAttachments } = processActionsOnContent(
+        cleanedText,
+        {
+          type: 'streaming',
+          isProgressive: progressiveActions,
+          isIdle: idle,
+        }
+      );
 
-      if (allActions && allActions.length > 0) {
-        allActions
-          .filter((a) => a.type !== "response" && a.actionType !== "tool")
-          .forEach((action, index) => {
-            const regex = new RegExp(action.pattern, "gmi");
-            newResponse = newResponse.replace(regex, (match, ...groups) => {
-              console.log("action match", match, groups);
-
-              const matchIndex = groups[groups.length - 2];
-              const buttonId = `button-${messages.length}-${index}-${matchIndex}`;
-
-              let html = match;
-              if (action.type === "button" || action.type === "callback") {
-                html = `<br /><button id="${buttonId}" ${
-                  action.style ? 'class="' + action.style + '"' : ""
-                }>
-              ${action.markdown ?? match}
-            </button>`;
-              } else if (action.type === "markdown" || action.type === "html") {
-                html = action.markdown ?? "";
-              }
-
-              html = html.replace(new RegExp("\\$match", "gmi"), match);
-              groups.forEach((group, index) => {
-                html = html.replace(
-                  new RegExp(`\\$${index + 1}`, "gmi"),
-                  group
-                );
-              });
-
-              // Store the button context for later attachment
-              const buttonContext = {
-                buttonId,
-                action,
-                match,
-                groups,
-              };
-
-              // Add this to state to track pending button attachments
-              setPendingButtonAttachments((prev) => [...prev, buttonContext]);
-
-              return html;
-            });
-          });
+      // Handle button attachments for non-progressive mode
+      if (!progressiveActions && buttonAttachments.length > 0) {
+        setPendingButtonAttachments((prev) => [...prev, ...buttonAttachments]);
       }
 
       // Store the cleaned response (without reasoning/searching tags and without tool JSON)
@@ -1330,7 +1576,57 @@ const ChatPanel: React.FC<ChatPanelProps & ExtraProps> = ({
     lastMessages,
     initialPrompt,
     processThinkingTags,
+    progressiveActions,
+    idle,
   ]);
+
+  // Finalization effect: when idle transitions true, convert placeholders to active buttons and queue attachments once
+  useEffect(() => {
+    if (!progressiveActions) return; // legacy path unchanged
+    if (!idle) return; // only finalize at end
+    if (!lastKey) return;
+    if (finalizedForCallRef.current === lastCallId) return; // already finalized
+
+    // Replace data-pending buttons in the stored history content for the lastKey
+    setHistory((prev) => {
+      const entry = prev[lastKey];
+      if (!entry) return prev;
+      let content = entry.content;
+      // Simple replace: remove data-pending attribute
+      content = content.replace(/data-pending="true"/g, "");
+
+      const updated = {
+        ...prev,
+        [lastKey]: { ...entry, content },
+      };
+      return updated;
+    });
+
+    // Queue attachments for all deferred actions not yet finalized
+    const attachments: Array<{
+      buttonId: string;
+      action: any;
+      match: string;
+      groups: any[];
+    }> = [];
+    deferredActionsRef.current.forEach((meta, buttonId) => {
+      if (!finalizedButtonsRef.current.has(buttonId)) {
+        attachments.push({ buttonId, ...meta });
+        finalizedButtonsRef.current.add(buttonId);
+      }
+    });
+
+    if (attachments.length > 0) {
+      setPendingButtonAttachments((prev) => [...prev, ...attachments]);
+    }
+
+    // Move deferred into active registry for delegation
+    attachments.forEach(({ buttonId, action, match, groups }) => {
+      buttonActionRegistry.current.set(buttonId, { action, match, groups });
+    });
+
+    finalizedForCallRef.current = lastCallId;
+  }, [idle, progressiveActions, lastCallId, lastKey]);
 
   // More reliable button attachment with retry mechanism and MutationObserver
   const attachButtonHandlers = useCallback(
@@ -1563,18 +1859,71 @@ const ChatPanel: React.FC<ChatPanelProps & ExtraProps> = ({
       // Set height to scrollHeight, but with min and max constraints
       const minHeight = 40; // Minimum height in pixels
       const maxHeight = 120; // Maximum height in pixels (about 4 lines)
+      
+      // Use user's resized height as minimum if they've manually resized
+      const effectiveMinHeight = userResizedHeight ? Math.max(userResizedHeight, minHeight) : minHeight;
+      
+      // If user has manually resized, don't enforce max height constraint
+      const effectiveMaxHeight = userResizedHeight ? Number.MAX_SAFE_INTEGER : maxHeight;
+      
       const newHeight = Math.min(
-        Math.max(textarea.scrollHeight, minHeight),
-        maxHeight
+        Math.max(textarea.scrollHeight, effectiveMinHeight),
+        effectiveMaxHeight
       );
       textarea.style.height = `${newHeight}px`;
     }
-  }, []);
+  }, [userResizedHeight]);
 
   // Auto-resize textarea when nextPrompt changes or component mounts
   useEffect(() => {
     autoResizeTextarea();
   }, [nextPrompt, autoResizeTextarea]);
+
+  // Detect manual textarea resizing by user
+  useEffect(() => {
+    if (!textareaRef.current) return;
+
+    const textarea = textareaRef.current;
+    
+    // Store the height before any potential user interaction
+    let heightBeforeInteraction = textarea.clientHeight;
+    let userIsInteracting = false;
+    
+    const handleMouseDown = () => {
+      heightBeforeInteraction = textarea.clientHeight;
+      userIsInteracting = true;
+    };
+
+    const handleMouseUp = () => {
+      if (userIsInteracting) {
+        const currentHeight = textarea.clientHeight;
+        // If the height changed significantly during user interaction, consider it a manual resize
+        if (Math.abs(currentHeight - heightBeforeInteraction) > 5) {
+          setUserResizedHeight(currentHeight);
+        }
+        userIsInteracting = false;
+      }
+    };
+
+    // Also handle the case where user drags outside the textarea
+    const handleGlobalMouseUp = () => {
+      if (userIsInteracting) {
+        handleMouseUp();
+      }
+    };
+
+    // Add event listeners
+    textarea.addEventListener('mousedown', handleMouseDown);
+    textarea.addEventListener('mouseup', handleMouseUp);
+    document.addEventListener('mouseup', handleGlobalMouseUp);
+
+    // Cleanup
+    return () => {
+      textarea.removeEventListener('mousedown', handleMouseDown);
+      textarea.removeEventListener('mouseup', handleMouseUp);
+      document.removeEventListener('mouseup', handleGlobalMouseUp);
+    };
+  }, []);
 
   // initial prompt change. Reset the chat history and get this response
   useEffect(() => {
@@ -1656,7 +2005,7 @@ const ChatPanel: React.FC<ChatPanelProps & ExtraProps> = ({
   }, [history, historyChangedCallback]);
 
   useEffect(() => {
-    console.log("followOnPromptChanged detected");
+    //console.log("followOnPromptChanged detected");
     if (followOnPrompt && followOnPrompt !== "") {
       continueChat(followOnPrompt);
     }
@@ -1712,7 +2061,7 @@ const ChatPanel: React.FC<ChatPanelProps & ExtraProps> = ({
         })
         .then((newConvo) => {
           if (newConvo?.id) {
-            console.log("new conversation created", newConvo.id);
+            //console.log("new conversation created", newConvo.id);
             setCurrentConversation(newConvo.id);
             return newConvo.id;
           }
@@ -1780,11 +2129,13 @@ const ChatPanel: React.FC<ChatPanelProps & ExtraProps> = ({
       // update the customer id and email in the conversation
       ensureConversation().then((convId) => {
         if (convId && convId !== "") {
+          /*
           console.log(
             "updating conversation with customer id and email",
             convId,
             updatedValues
           );
+          */
 
           fetch(`${publicAPIUrl}/conversations/${convId}`, {
             method: "POST",
@@ -1807,7 +2158,7 @@ const ChatPanel: React.FC<ChatPanelProps & ExtraProps> = ({
   }, [currentCustomer, project_id, agent, publicAPIUrl, emailInput]);
 
   const continueChat = (suggestion?: string) => {
-    console.log("continueChat called");
+    //console.log("continueChat called");
 
     // Clear thinking blocks for new response
     setThinkingBlocks([]);
@@ -1832,7 +2183,7 @@ const ChatPanel: React.FC<ChatPanelProps & ExtraProps> = ({
 
     // wait till new conversation created....
     ensureConversation().then((convId) => {
-      console.log("current customer", currentCustomer);
+      //console.log("current customer", currentCustomer);
 
       if (!idle) {
         stop(lastController);
@@ -1939,7 +2290,7 @@ const ChatPanel: React.FC<ChatPanelProps & ExtraProps> = ({
           }
         }
 
-        console.log("Sending for conversation", convId);
+        //console.log("Sending for conversation", convId);
 
         const controller = new AbortController();
         send(
@@ -2431,8 +2782,24 @@ const ChatPanel: React.FC<ChatPanelProps & ExtraProps> = ({
                         return null;
                       })()}
 
-                      {/* Display the main content (cleaned of thinking tags) */}
+                      {/* Display the main content (processed with actions) */}
                       {(() => {
+                        // Get the processed content that includes action buttons from history
+                        // During streaming, use the most recent history entry if it exists
+                        if (lastKey && history[lastKey] && history[lastKey].content) {
+                          return (
+                            <ReactMarkdown
+                              className={markdownClass}
+                              remarkPlugins={[remarkGfm]}
+                              rehypePlugins={[rehypeRaw]}
+                              components={{ /*a: CustomLink,*/ code: CodeBlock }}
+                            >
+                              {history[lastKey].content}
+                            </ReactMarkdown>
+                          );
+                        }
+                        
+                        // Fallback to cleaned text if no processed history exists yet
                         const { cleanedText } = processThinkingTags(
                           response || ""
                         );
@@ -2894,7 +3261,7 @@ const ChatPanel: React.FC<ChatPanelProps & ExtraProps> = ({
         <div className="input-container">
           <textarea
             ref={textareaRef}
-            className="chat-input"
+            className={`chat-input${userResizedHeight ? ' user-resized' : ''}`}
             placeholder={placeholder}
             value={nextPrompt}
             onChange={(e) => {
@@ -2916,7 +3283,16 @@ const ChatPanel: React.FC<ChatPanelProps & ExtraProps> = ({
                 }
               }
             }}
+            onDoubleClick={() => {
+              // Double-click to reset to default auto-resize behavior
+              if (userResizedHeight) {
+                setUserResizedHeight(null);
+                // Trigger auto-resize to return to content-based height
+                setTimeout(autoResizeTextarea, 0);
+              }
+            }}
             disabled={isDisabledDueToNoEmail()}
+            title={userResizedHeight ? "Double-click to reset to auto-resize" : "Drag bottom-right corner to manually resize"}
           ></textarea>
           <button
             className="send-button"
