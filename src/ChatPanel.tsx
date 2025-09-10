@@ -930,8 +930,6 @@ const ChatPanel: React.FC<ChatPanelProps & ExtraProps> = ({
   useEffect(() => {
     if (Object.keys(initialHistory).length === 0) return;
     setHistory(initialHistory);
-    // Reset processed history keys when initialHistory changes to ensure reprocessing with actions
-    processedHistoryKeysRef.current.clear();
   }, [initialHistory]);
 
   useEffect(() => {
@@ -1192,9 +1190,6 @@ const ChatPanel: React.FC<ChatPanelProps & ExtraProps> = ({
     ]);
   }, [actions]);
 
-  // Track which history prompts have been processed by actions formatting
-  const processedHistoryKeysRef = useRef<Set<string>>(new Set());
-
   // Process existing (initial) history entries so they receive the same formatting
   // as streamed responses (tool JSON removal, thinking tag removal, action markdown/button injection)
   useEffect(() => {
@@ -1213,10 +1208,7 @@ const ChatPanel: React.FC<ChatPanelProps & ExtraProps> = ({
       }> = [];
 
       Object.entries(prevHistory).forEach(([prompt, entry], historyIndex) => {
-        if (processedHistoryKeysRef.current.has(prompt)) return; // skip already processed
-
         if (!entry || !entry.content) {
-          processedHistoryKeysRef.current.add(prompt);
           return;
         }
 
@@ -1237,7 +1229,6 @@ const ChatPanel: React.FC<ChatPanelProps & ExtraProps> = ({
         // Add button attachments to the queue
         newButtonAttachments.push(...buttonAttachments);
         
-        processedHistoryKeysRef.current.add(prompt);
       });
 
       if (newButtonAttachments.length > 0) {
