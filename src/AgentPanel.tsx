@@ -61,6 +61,7 @@ export interface AgentPanelProps {
   createConversationOnFirstChat?: boolean;
   customerEmailCaptureMode?: "HIDE" | "OPTIONAL" | "REQUIRED";
   customerEmailCapturePlaceholder?: string;
+  progressiveActions?: boolean;
 }
 interface ExtraProps extends React.HTMLAttributes<HTMLElement> {
   inline?: boolean;
@@ -107,6 +108,7 @@ const AgentPanel: React.FC<AgentPanelProps & ExtraProps> = ({
   //ragRankLimit = 5,
   initialHistory = {},
   hideRagContextInPrompt = true,
+  progressiveActions = true,
 }) => {
   const searchParams = new URLSearchParams(location.search);
   const customer_id = searchParams.get("customer_id") || null;
@@ -314,6 +316,7 @@ const AgentPanel: React.FC<AgentPanelProps & ExtraProps> = ({
             "Please enter your email..."
           }
           mcpServers={mcpData}
+          progressiveActions={progressiveActions}
         />
       )}
     </>

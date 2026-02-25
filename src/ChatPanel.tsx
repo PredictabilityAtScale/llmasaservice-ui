@@ -1174,11 +1174,30 @@ const ChatPanel: React.FC<ChatPanelProps & ExtraProps> = ({
       actionsLength: Array.isArray(actions) ? actions.length : "not array"
     });
     
-    const actionsString =
-      typeof actions === "string" ? actions : JSON.stringify(actions);
-    const processedActions = getActionsArraySafely(actionsString);
+    let processedActions: any[] = [];
+    
+    if (typeof actions === "string") {
+      // Handle string-based actions (legacy)
+      processedActions = getActionsArraySafely(actions);
+    } else if (Array.isArray(actions)) {
+      // Handle direct action objects with function callbacks
+      console.log("Processing direct action array:", actions);
+      processedActions = actions.map(action => {
+        console.log("Processing action:", {
+          type: action.type,
+          hasCallback: !!action.callback,
+          callbackType: typeof action.callback,
+          pattern: action.pattern
+        });
+        return action; // Keep the action as-is, including function callbacks
+      });
+    } else if (actions) {
+      // Handle object actions by converting to string and parsing
+      const actionsString = JSON.stringify(actions);
+      processedActions = getActionsArraySafely(actionsString);
+    }
+    
     console.log("DEBUG: Setting allActions:", {
-      actionsString,
       processedActions,
       totalActions: [...processedActions, anthropic_toolAction, openAI_toolAction, google_toolAction].length
     });
@@ -1631,63 +1650,80 @@ const ChatPanel: React.FC<ChatPanelProps & ExtraProps> = ({
       retryCount = 0
     ) => {
       if (attachments.length === 0) return;
+      
+      console.log(`Attempting to attach ${attachments.length} button handlers (retry ${retryCount})`);
+      
       let attachedCount = 0;
       let notFoundCount = 0;
       let alreadyAttachedCount = 0;
       const stillPending: typeof attachments = [];
 
-      // First, let's see what buttons actually exist in the DOM
-      const allButtonsInDOM = document.querySelectorAll("button");
-      const buttonIdsInDOM = Array.from(allButtonsInDOM)
-        .map((btn) => btn.id)
-        .filter((id) => id);
+      // Add longer delay for initial attachment attempt
+      const delay = retryCount === 0 ? 500 : 200;
+      
+      setTimeout(() => {
+        attachments.forEach(({ buttonId, action, match, groups }) => {
+          const button = document.getElementById(buttonId) as HTMLButtonElement;
 
-      attachments.forEach(({ buttonId, action, match, groups }) => {
-        const button = document.getElementById(buttonId) as HTMLButtonElement;
-
-        if (button) {
-          if (!button.onclick) {
-            button.onclick = () => {
-              if (action.callback) {
-                action.callback(match, groups);
-              }
-
-              if (action.clickCode) {
-                try {
-                  const func = new Function("match", action.clickCode);
-                  func(match);
-                  // Note: interactionClicked will be available when this closure executes
-                  if (typeof interactionClicked === "function") {
-                    interactionClicked(lastCallId, "action");
+          if (button) {
+            if (!button.onclick) {
+              console.log('Attaching handler to button:', buttonId);
+              button.onclick = () => {
+                console.log('Button clicked:', buttonId, { match, groups });
+                console.log('Action callback info:', {
+                  hasCallback: !!action.callback,
+                  callbackType: typeof action.callback,
+                  actionType: action.type
+                });
+                
+                if (action.callback) {
+                  try {
+                    console.log('🎯 Calling action callback with:', { match, groups });
+                    action.callback(match, groups);
+                    console.log('✅ Action callback completed successfully');
+                  } catch (error) {
+                    console.error('❌ Error in action callback:', error);
                   }
-                } catch (error) {
-                  console.error("Error executing clickCode:", error);
                 }
-              }
-            };
-            attachedCount++;
-          } else {
-            alreadyAttachedCount++;
-          }
-        } else {
-          notFoundCount++;
-          stillPending.push({ buttonId, action, match, groups });
-          // Only register in fallback for buttons that failed direct attachment
-          buttonActionRegistry.current.set(buttonId, { action, match, groups });
-        }
-      });
 
-      // If there are still pending buttons and we haven't exceeded retry limit, try again
-      if (stillPending.length > 0 && retryCount < 5) {
-        setTimeout(() => {
+                if (action.clickCode) {
+                  try {
+                    const func = new Function("match", action.clickCode);
+                    func(match);
+                    // Note: interactionClicked will be available when this closure executes
+                    if (typeof interactionClicked === "function") {
+                      interactionClicked(lastCallId, "action");
+                    }
+                  } catch (error) {
+                    console.error("Error executing clickCode:", error);
+                  }
+                }
+              };
+              attachedCount++;
+            } else {
+              alreadyAttachedCount++;
+            }
+          } else {
+            notFoundCount++;
+            stillPending.push({ buttonId, action, match, groups });
+            // Only register in fallback for buttons that failed direct attachment
+            buttonActionRegistry.current.set(buttonId, { action, match, groups });
+          }
+        });
+
+        console.log(`Attachment results: ${attachedCount} attached, ${alreadyAttachedCount} already attached, ${notFoundCount} not found`);
+
+        // If there are still pending buttons and we haven't exceeded retry limit, try again
+        if (stillPending.length > 0 && retryCount < 8) {
+          console.log(`Retrying attachment for ${stillPending.length} buttons`);
           attachButtonHandlers(stillPending, retryCount + 1);
-        }, 200);
-      } else if (stillPending.length > 0) {
-        console.warn(
-          "Failed to attach all buttons after max retries:",
-          stillPending.map((p) => p.buttonId)
-        );
-      }
+        } else if (stillPending.length > 0) {
+          console.warn(
+            "Failed to attach all buttons after max retries:",
+            stillPending.map((p) => p.buttonId)
+          );
+        }
+      }, delay);
     },
     [lastCallId]
   );
@@ -3571,6 +3607,27 @@ const ChatPanel: React.FC<ChatPanelProps & ExtraProps> = ({
           </div>
         </div>
       )}
+      
+      {/* Add debug helper function */}
+      {typeof window !== "undefined" && (() => {
+        (window as any).debugChatPanelButtons = () => {
+          const allButtons = document.querySelectorAll('button[id^="button-"]');
+          const buttonInfo = Array.from(allButtons).map((button) => ({
+            id: button.id,
+            hasOnclick: !!(button as HTMLButtonElement).onclick,
+            textContent: button.textContent?.substring(0, 50),
+            inRegistry: buttonActionRegistry.current.has(button.id),
+          }));
+          console.table(buttonInfo);
+          return {
+            totalButtons: buttonInfo.length,
+            withHandlers: buttonInfo.filter(b => b.hasOnclick).length,
+            withoutHandlers: buttonInfo.filter(b => !b.hasOnclick).length,
+            inRegistry: buttonInfo.filter(b => b.inRegistry).length,
+          };
+        };
+        return null;
+      })()}
     </>
   );
 };
