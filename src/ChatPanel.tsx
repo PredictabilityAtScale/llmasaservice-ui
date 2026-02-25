@@ -207,7 +207,7 @@ const ChatPanel: React.FC<ChatPanelProps & ExtraProps> = ({
   >([]);
 
   const [followOnQuestionsState, setFollowOnQuestionsState] =
-    useState(followOnQuestions);
+    useState(followOnQuestions.filter((q) => q.trim() !== ""));
 
   // new per‐tool approval state
   const [sessionApprovedTools, setSessionApprovedTools] = useState<string[]>(
@@ -264,8 +264,9 @@ const ChatPanel: React.FC<ChatPanelProps & ExtraProps> = ({
   }, [alwaysApprovedTools]);
 
   useEffect(() => {
-    if (followOnQuestions !== followOnQuestionsState) {
-      setFollowOnQuestionsState(followOnQuestions);
+    const filtered = followOnQuestions.filter((q) => q.trim() !== "");
+    if (filtered.length !== followOnQuestionsState.length || filtered.some((q, i) => q !== followOnQuestionsState[i])) {
+      setFollowOnQuestionsState(filtered);
     }
   }, [followOnQuestions]);
 
@@ -1049,7 +1050,9 @@ const ChatPanel: React.FC<ChatPanelProps & ExtraProps> = ({
 
   const setFollowUpQuestionsCallback = useCallback(
     (match: string, groups: any[], ...extraArgs: string[]) => {
-      const val = extractValue(match, groups, extraArgs).split("|");
+      const val = extractValue(match, groups, extraArgs)
+        .split("|")
+        .filter((q) => q.trim() !== "");
       setFollowOnQuestionsState(val);
     },
     [followOnQuestions]
@@ -3180,7 +3183,7 @@ const ChatPanel: React.FC<ChatPanelProps & ExtraProps> = ({
                   setEmailSent(false);
                   setCTAClickedButNoEmail(false);
                   setEmailClickedButNoEmail(false);
-                  setFollowOnQuestionsState(followOnQuestions);
+                  setFollowOnQuestionsState(followOnQuestions.filter((q) => q.trim() !== ""));
                   setSessionApprovedTools([]);
                   setThinkingBlocks([]);
                   setCurrentThinkingIndex(0);
