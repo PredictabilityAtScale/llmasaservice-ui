@@ -1068,6 +1068,43 @@
   white-space: pre-wrap;
 }
 
+.thinking-content-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 6px;
+}
+
+.thinking-content-collapsed {
+  display: -webkit-box;
+  -webkit-line-clamp: 3;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  flex: 1;
+  min-width: 0;
+}
+
+.thinking-content-expanded {
+  flex: 1;
+  min-width: 0;
+}
+
+.thinking-expand-btn {
+  background: none;
+  border: none;
+  cursor: pointer;
+  color: var(--title-text-color);
+  font-size: 0.75rem;
+  padding: 2px 4px;
+  margin-top: 2px;
+  opacity: 0.7;
+  flex-shrink: 0;
+}
+
+.thinking-expand-btn:hover {
+  opacity: 1;
+}
+
 /* Progressive action placeholder buttons */
 button[data-pending="true"] {
   opacity: 0.55;

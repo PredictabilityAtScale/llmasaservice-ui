@@ -220,6 +220,7 @@ const ChatPanel: React.FC<ChatPanelProps & ExtraProps> = ({
     Array<{ type: "reasoning" | "searching"; content: string; index: number }>
   >([]);
   const [currentThinkingIndex, setCurrentThinkingIndex] = useState(0);
+  const [thinkingExpanded, setThinkingExpanded] = useState(false);
 
   // State for tracking user-resized textarea height
   const [userResizedHeight, setUserResizedHeight] = useState<number | null>(null);
@@ -510,11 +511,22 @@ const ChatPanel: React.FC<ChatPanelProps & ExtraProps> = ({
               </div>
             )}
           </div>
-          <div className="thinking-content">{content}</div>
+          <div className="thinking-content-row">
+            <div className={`thinking-content ${thinkingExpanded ? 'thinking-content-expanded' : 'thinking-content-collapsed'}`}>
+              {content}
+            </div>
+            <button
+              className="thinking-expand-btn"
+              onClick={() => setThinkingExpanded((prev) => !prev)}
+              title={thinkingExpanded ? "Collapse" : "Expand"}
+            >
+              {thinkingExpanded ? "▲" : "▼"}
+            </button>
+          </div>
         </div>
       </div>
     );
-  }, [thinkingBlocks, currentThinkingIndex]);
+  }, [thinkingBlocks, currentThinkingIndex, thinkingExpanded]);
 
   const getBrowserInfo = () => {
     try {
@@ -1192,8 +1204,25 @@ const ChatPanel: React.FC<ChatPanelProps & ExtraProps> = ({
           callbackType: typeof action.callback,
           pattern: action.pattern
         });
-        return action; // Keep the action as-is, including function callbacks
-      });
+        // If callback is a string, resolve it via callbackMapping (same as getActionsArraySafely)
+        if (typeof action.callback === "string") {
+          const parsed = parseCallbackString(action.callback);
+          if (parsed && parsed.name && callbackMapping[parsed.name]) {
+            const mappedCallback = callbackMapping[parsed.name];
+            if (mappedCallback) {
+              return {
+                ...action,
+                callback: (match: string, groups: any[]) =>
+                  mappedCallback(match, groups, ...parsed.args),
+              };
+            }
+          }
+          // Unknown string callback — remove it so it doesn't crash
+          const { callback, ...rest } = action;
+          return rest;
+        }
+        return action; // Keep the action as-is (function callbacks, no callback, etc.)
+      }).filter(Boolean);
     } else if (actions) {
       // Handle object actions by converting to string and parsing
       const actionsString = JSON.stringify(actions);
